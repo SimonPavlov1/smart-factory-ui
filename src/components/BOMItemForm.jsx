@@ -21,7 +21,7 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
         finalResourceType = "product";
 
         // 1. Автоматически создаем этот узел как самостоятельное изделие в базе данных
-        const createProductRes = await fetch("http://127.0.0.1:8000/production/setup-product", {
+        const createProductRes = await fetch("/api/production/setup-product", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -53,7 +53,7 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
       };
 
       // Отправляем позицию в BOM текущего устройства
-      const response = await fetch(`http://127.0.0.1:8000/production/process-bom/${productId}`, {
+      const response = await fetch(`/api/production/process-bom/${productId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify([newItem]),

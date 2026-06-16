@@ -34,7 +34,7 @@ export default function ProductForm({ onBack, initialData = null }) {
 
       if (isEditMode) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ СУЩЕСТВУЮЩЕГО ИЗДЕЛИЯ (PUT) ---
-        url = `http://127.0.0.1:8000/production/products/${initialData.id}`;
+        url = `/api/production/products/${initialData.id}`;
         method = "PUT";
         payload = {
           name: name.trim(),
@@ -43,7 +43,7 @@ export default function ProductForm({ onBack, initialData = null }) {
         };
       } else {
         // --- РЕЖИМ СОЗДАНИЯ НОВОГО ОБЪЕКТА (POST) ---
-        url = "http://127.0.0.1:8000/production/setup-product";
+        url = "/api/production/setup-product";
         method = "POST";
 
         payload = {

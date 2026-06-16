@@ -21,7 +21,7 @@ export default function InventoryBase() {
   const [tempQty, setTempQty] = useState("");
 
   const fetchComponents = async (searchStr = "") => {
-    let url = "http://127.0.0.1:8000/inventory/components";
+    let url = "/api/inventory/components";
     if (searchStr.trim()) url += `?search=${encodeURIComponent(searchStr.trim())}`;
     const res = await fetch(url);
     if (res.ok) setComponents(await res.json());
@@ -34,18 +34,18 @@ export default function InventoryBase() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Удалить позицию?")) return;
-    const res = await fetch(`http://127.0.0.1:8000/inventory/components/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/inventory/components/${id}`, { method: "DELETE" });
     if (res.ok) fetchComponents(searchQuery);
   };
 
   const handleUpdateQty = async (id, val) => {
-    const res = await fetch(`http://127.0.0.1:8000/inventory/components/${id}/quantity?new_quantity=${val}`, { method: "PATCH" });
+    const res = await fetch(`/api/inventory/components/${id}/quantity?new_quantity=${val}`, { method: "PATCH" });
     if (res.ok) { setEditingQtyId(null); fetchComponents(searchQuery); }
   };
 
   const handleIncomingSubmit = async (e, id) => {
     e.preventDefault();
-    const res = await fetch(`http://127.0.0.1:8000/inventory/incoming?component_id=${id}&quantity=${incomingQty}`, { method: "POST" });
+    const res = await fetch(`/api/inventory/incoming?component_id=${id}&quantity=${incomingQty}`, { method: "POST" });
     if (res.ok) { setIncomingCompId(null); setIncomingQty(""); fetchComponents(searchQuery); }
   };
 

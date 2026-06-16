@@ -20,7 +20,7 @@ export default function InventoryForm({ onBack, onSuccess, initialData = null })
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/inventory/components/categories");
+        const res = await fetch("/api/inventory/components/categories");
         if (res.ok) {
           const data = await res.json();
           setCategories(data);
@@ -49,8 +49,8 @@ export default function InventoryForm({ onBack, onSuccess, initialData = null })
 
     try {
       const url = initialData
-        ? `http://127.0.0.1:8000/inventory/components/${initialData.id}`
-        : "http://127.0.0.1:8000/inventory/components";
+        ? `/api/inventory/components/${initialData.id}`
+        : "/api/inventory/components";
 
       const res = await fetch(url, {
         method: initialData ? "PUT" : "POST",

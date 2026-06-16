@@ -135,8 +135,8 @@ const BOMRow = ({
     if (showDropdown) { setShowDropdown(false); return; }
     try {
       const [resComponents, resProducts] = await Promise.all([
-        fetch("http://127.0.0.1:8000/inventory/components"),
-        fetch("http://127.0.0.1:8000/production/products")
+        fetch("/api/inventory/components"),
+        fetch("/api/production/products")
       ]);
       if (resComponents.ok && resProducts.ok) {
         setAvailableComponents(await resComponents.json());
@@ -149,7 +149,7 @@ const BOMRow = ({
   // ОБНОВЛЕННЫЙ МЕТОД: Может принимать null для resourceId (сброс привязки)
   const handleAssignResource = async (resourceId, resourceType) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/production/bom-items/${item.id}`, {
+      const res = await fetch(`/api/production/bom-items/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -172,7 +172,7 @@ const BOMRow = ({
     if (!window.confirm(`Удалить позицию "${bomDesignName}"?`)) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/production/bom-items/${item.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/production/bom-items/${item.id}`, { method: "DELETE" });
       if (res.ok && onResolveSuccess) onResolveSuccess();
     } catch (err) { console.error(err); } finally { setIsDeleting(false); }
   };
@@ -182,7 +182,7 @@ const BOMRow = ({
     if (!editName.trim()) return alert("Наименование обязательно");
     setIsSaving(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/production/bom-items/${item.id}`, {
+      const res = await fetch(`/api/production/bom-items/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ design_name: editName, quantity: Number(editQty), designators: editDesignators || "" })
@@ -388,7 +388,7 @@ export default function GadgetsBase() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://127.0.0.1:8000/production/products");
+      const response = await fetch("/api/production/products");
       if (response.ok) {
         const data = await response.json();
         setProducts(Array.isArray(data) ? data : []);
@@ -406,7 +406,7 @@ export default function GadgetsBase() {
     e.stopPropagation();
     if (!window.confirm(`Вы уверены, что хотите безвозвратно удалить из базы изделие "${name}"?`)) return;
     try {
-      const response = await fetch(`http://127.0.0.1:8000/production/products/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/production/products/${id}`, { method: "DELETE" });
       if (response.ok) { fetchProducts(); }
     } catch (err) { console.error(err); }
   };
@@ -438,7 +438,7 @@ export default function GadgetsBase() {
 
   const handleSmartResolve = async (id) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/production/products/${id}/resolve-bom`, { method: "POST" });
+      const res = await fetch(`/api/production/products/${id}/resolve-bom`, { method: "POST" });
       if (res.ok) { alert("Подбор завершен успешно"); fetchProducts(); }
     } catch (e) { console.error(e); }
   };
