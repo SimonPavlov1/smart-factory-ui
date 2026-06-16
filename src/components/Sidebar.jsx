@@ -73,7 +73,8 @@ export default function Sidebar({ activePage, setActivePage }) {
     { id: 'Мои задачи', icon: Icons.Tasks },
     { id: 'Персонал', icon: Icons.Users },
     { id: 'База изделий', icon: Icons.Gadgets },
-    { id: 'Склад ТМЦ', icon: Icons.Warehouse }, // <-- Наш новый пункт
+    { id: 'Склад ТМЦ', icon: Icons.Warehouse },
+    { id: 'Производство', icon: Icons.Tasks },
   ];
 
   return (

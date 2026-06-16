@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import GadgetsBase from "./components/GadgetsBase.jsx";
-import InventoryBase from "./components/InventoryBase.jsx"; // Подключаем новую страницу склада
+import InventoryBase from "./components/InventoryBase.jsx";
+import ManufacturingPage from "./components/ManufacturingPage";
 import "./index.css";
 
 // Твои заглушки страниц
@@ -21,7 +22,8 @@ export default function App() {
       case 'Мои задачи': return <MyTasks />;
       case 'Персонал': return <Personnel />;
       case 'База изделий': return <GadgetsBase />;
-      case 'Склад ТМЦ': return <InventoryBase />; // <-- Новая страница склада
+      case 'Склад ТМЦ': return <InventoryBase />;
+      case 'Производство': return <ManufacturingPage />;
       default: return <Dashboard />;
     }
   };
