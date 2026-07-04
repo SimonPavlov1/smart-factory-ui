@@ -315,59 +315,53 @@ export default function ManufacturingPage() {
         )}
       </div>
 
-      {/* МОДАЛЬНОЕ ОКНО: ВЕДОМОСТЬ КОМПЛЕКТУЮЩИХ */}
-      {isDetailsModalOpen && activeOrder && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[30px] p-8 w-full max-w-2xl shadow-xl border border-slate-100 max-h-[85vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Ведомость материалов заказа #{activeOrder.id}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Суммарная потребность склада под изделия клиента</p>
-              </div>
-              <button onClick={() => setIsDetailsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
+      {/* ЗАМЕНИТЕ ВЕСЬ БЛОК МОДАЛЬНОГО ОКНА С МАТЕРИАЛАМИ НА ЭТОТ: */}
 
-            <div className="flex-1 overflow-y-auto my-4 border border-slate-100 rounded-xl bg-slate-50/50 p-4">
-              {materialsLoading ? (
-                <div className="text-center py-12 text-xs font-semibold text-slate-400 uppercase tracking-widest animate-pulse">Агрегируем спецификации BOM...</div>
-              ) : requiredMaterials.length > 0 ? (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                      <th className="pb-3">Компонент</th>
-                      <th className="pb-3">Артикул / SKU</th>
-                      <th className="pb-3 text-right">Нужно всего</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                    {requiredMaterials.map((mat, i) => (
-                      <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 font-semibold text-slate-900">{mat.name}</td>
-                        <td className="py-3 font-mono text-[11px] text-slate-400">{mat.sku}</td>
-                        <td className="py-3 text-right font-bold text-slate-900">{mat.qty} шт.</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="text-center py-12 text-sm text-slate-400 font-medium">Для выбранных изделий не заполнен состав BOM на бэкенде.</div>
-              )}
-            </div>
+<div className="flex-1 overflow-y-auto my-4 border border-slate-100 rounded-xl bg-slate-50/50 p-4">
+  {materialsLoading ? (
+    <p className="text-center text-slate-400">Загрузка спецификации...</p>
+  ) : (
+    (() => {
+      // Группировка данных на лету
+      const grouped = requiredMaterials.reduce((acc, item) => {
+        const { device, assembly, category } = item;
+        if (!acc[device]) acc[device] = {};
+        if (!acc[device][assembly]) acc[device][assembly] = {};
+        if (!acc[device][assembly][category]) acc[device][assembly][category] = [];
+        acc[device][assembly][category].push(item);
+        return acc;
+      }, {});
 
-            {!materialsLoading && requiredMaterials.length > 0 && (
-              <button
-                onClick={downloadPDF}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-md"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                Скачать спецификацию (PDF)
-              </button>
-            )}
-          </div>
+      return (
+        <div className="space-y-4">
+          {Object.entries(grouped).map(([device, assemblies]) => (
+            <div key={device} className="border border-slate-200 rounded-xl p-4 bg-white">
+              <h3 className="font-bold text-sm text-slate-900 border-b pb-2 mb-2">Устройство: {device}</h3>
+              {Object.entries(assemblies).map(([assembly, categories]) => (
+                <div key={assembly} className="ml-4 mt-2">
+                  <h4 className="font-semibold text-xs text-slate-700 italic">Сборочная единица: {assembly}</h4>
+                  {Object.entries(categories).map(([category, items]) => (
+                    <div key={category} className="ml-4 mt-1 mb-2">
+                      <p className="text-[10px] font-bold uppercase text-slate-400">{category}</p>
+                      <ul className="space-y-1">
+                        {items.map((mat, i) => (
+                          <li key={i} className="text-xs text-slate-600 flex justify-between">
+                            <span>{mat.name}</span>
+                            <span className="font-bold">{mat.qty} шт.</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
-      )}
+      );
+    })()
+  )}
+</div>
 
       {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ЗАКАЗА */}
       {isModalOpen && (
