@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 // Импортируем ваш локальный ГОСТ шрифт
-import { gostFontBase64 } from "./gostFont";
 
 export default function ManufacturingPage() {
   const [orders, setOrders] = useState([]);
@@ -21,6 +20,7 @@ export default function ManufacturingPage() {
   const [activeOrder, setActiveOrder] = useState(null);
   const [requiredMaterials, setRequiredMaterials] = useState([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState("");
 
   const fetchOrders = async () => {
     try {
@@ -55,6 +55,7 @@ export default function ManufacturingPage() {
     setIsDetailsModalOpen(true);
     setMaterialsLoading(true);
     setRequiredMaterials([]);
+    setMaterialsError("");
 
     try {
       const res = await fetch(`/api/manufacturing/orders/${order.id}/bom-summary`);
@@ -62,10 +63,12 @@ export default function ManufacturingPage() {
         const bomData = await res.json();
         setRequiredMaterials(bomData);
       } else {
-        console.error("Не удалось загрузить спецификацию заказа");
+        const err = await res.json().catch(() => ({}));
+        setMaterialsError(err.detail || "Не удалось загрузить спецификацию заказа");
       }
     } catch (err) {
       console.error("Ошибка сети при запросе BOM:", err);
+      setMaterialsError("Ошибка сети при запросе спецификации заказа");
     } finally {
       setMaterialsLoading(false);
     }
@@ -97,7 +100,8 @@ export default function ManufacturingPage() {
       doc.text(`Номер заказа: #${activeOrder.id}`, 14, 30);
       doc.text(`Заказчик: ${activeOrder.customer_name || "Не указан"}`, 14, 35);
 
-      let statusRu = activeOrder.status === "In Progress" ? "В ожидании" :
+      let statusRu = activeOrder.status === "Reserved" ? "Материалы зарезервированы" :
+                     activeOrder.status === "In Progress" ? "В ожидании" :
                      activeOrder.status === "Materials Issued" ? "Компоненты выданы" : "В производстве";
       doc.text(`Текущий статус: ${statusRu}`, 14, 40);
       doc.text(`Дата генерации отчета: ${new Date().toLocaleDateString("ru-RU")}`, 14, 45);
@@ -105,12 +109,13 @@ export default function ManufacturingPage() {
       // --- ТАБЛИЦА ---
       doc.autoTable({
         startY: 52, // Сдвинули таблицу ниже, чтобы освободить место для шапки
-        head: [["Поз. обозначение", "Наименование", "Кол.", "Примечание"]],
+        head: [["Изделие", "Сборочная единица", "Поз. обозначение", "Наименование", "Кол."]],
         body: requiredMaterials.map((mat) => [
-          mat.sku || "-",
+          mat.device || "-",
+          mat.assembly || "-",
+          mat.designators || mat.sku || "-",
           mat.name || "-",
           mat.qty || "1",
-          ""
         ]),
         theme: "grid",
         styles: {
@@ -127,10 +132,11 @@ export default function ManufacturingPage() {
           lineWidth: 0.2,
         },
         columnStyles: {
-          0: { cellWidth: 35, halign: "center" },
-          1: { cellWidth: 100 },
-          2: { cellWidth: 15, halign: "center" },
-          3: { cellWidth: 30 }
+          0: { cellWidth: 35 },
+          1: { cellWidth: 38 },
+          2: { cellWidth: 28, halign: "center" },
+          3: { cellWidth: 70 },
+          4: { cellWidth: 15, halign: "center" }
         },
         margin: { left: 14, right: 14 },
       });
@@ -256,11 +262,14 @@ export default function ManufacturingPage() {
                   <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
                     order.status === "Materials Issued"
                       ? "bg-amber-50 text-amber-600 border-amber-100"
+                      : order.status === "Reserved"
+                      ? "bg-blue-50 text-blue-600 border-blue-100"
                       : order.status === "In Production"
                       ? "bg-green-50 text-green-600 border-green-100"
                       : "bg-blue-50 text-blue-600 border-blue-100"
                   }`}>
                     {order.status === "In Progress" && "В ожидании"}
+                    {order.status === "Reserved" && "Зарезервировано"}
                     {order.status === "Materials Issued" && "Выданы комплектующие"}
                     {order.status === "In Production" && "В производстве"}
                   </span>
@@ -298,7 +307,7 @@ export default function ManufacturingPage() {
                   Сводная комплектация
                 </button>
 
-                {order.status === "In Progress" && (
+                {(order.status === "In Progress" || order.status === "Reserved") && (
                   <button
                     onClick={() => issueMaterials(order.id)}
                     disabled={loading}
@@ -315,53 +324,95 @@ export default function ManufacturingPage() {
         )}
       </div>
 
-      {/* ЗАМЕНИТЕ ВЕСЬ БЛОК МОДАЛЬНОГО ОКНА С МАТЕРИАЛАМИ НА ЭТОТ: */}
-
-<div className="flex-1 overflow-y-auto my-4 border border-slate-100 rounded-xl bg-slate-50/50 p-4">
-  {materialsLoading ? (
-    <p className="text-center text-slate-400">Загрузка спецификации...</p>
-  ) : (
-    (() => {
-      // Группировка данных на лету
-      const grouped = requiredMaterials.reduce((acc, item) => {
-        const { device, assembly, category } = item;
-        if (!acc[device]) acc[device] = {};
-        if (!acc[device][assembly]) acc[device][assembly] = {};
-        if (!acc[device][assembly][category]) acc[device][assembly][category] = [];
-        acc[device][assembly][category].push(item);
-        return acc;
-      }, {});
-
-      return (
-        <div className="space-y-4">
-          {Object.entries(grouped).map(([device, assemblies]) => (
-            <div key={device} className="border border-slate-200 rounded-xl p-4 bg-white">
-              <h3 className="font-bold text-sm text-slate-900 border-b pb-2 mb-2">Устройство: {device}</h3>
-              {Object.entries(assemblies).map(([assembly, categories]) => (
-                <div key={assembly} className="ml-4 mt-2">
-                  <h4 className="font-semibold text-xs text-slate-700 italic">Сборочная единица: {assembly}</h4>
-                  {Object.entries(categories).map(([category, items]) => (
-                    <div key={category} className="ml-4 mt-1 mb-2">
-                      <p className="text-[10px] font-bold uppercase text-slate-400">{category}</p>
-                      <ul className="space-y-1">
-                        {items.map((mat, i) => (
-                          <li key={i} className="text-xs text-slate-600 flex justify-between">
-                            <span>{mat.name}</span>
-                            <span className="font-bold">{mat.qty} шт.</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ))}
+      {isDetailsModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[30px] p-8 w-full max-w-3xl shadow-xl border border-slate-100 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-start gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Сводная комплектация</h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Заказ #{activeOrder?.id} · {activeOrder?.customer_name || "Заказчик не указан"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={downloadPDF}
+                  disabled={materialsLoading || requiredMaterials.length === 0}
+                  className="text-xs font-bold uppercase text-white bg-slate-900 hover:bg-slate-800 px-4 py-3 rounded-xl disabled:bg-slate-300"
+                >
+                  PDF
+                </button>
+                <button
+                  onClick={() => setIsDetailsModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-3"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
-          ))}
+
+            <div className="flex-1 overflow-y-auto border border-slate-100 rounded-xl bg-slate-50/50 p-4">
+              {materialsLoading ? (
+                <p className="text-center text-slate-400">Загрузка спецификации...</p>
+              ) : materialsError ? (
+                <p className="text-center text-red-600 text-sm">{materialsError}</p>
+              ) : requiredMaterials.length === 0 ? (
+                <p className="text-center text-slate-400">Комплектующие не найдены.</p>
+              ) : (
+                (() => {
+                  const grouped = requiredMaterials.reduce((acc, item) => {
+                    const device = item.device || "Готовое изделие";
+                    const assembly = item.assembly || "Основной состав";
+                    const category = item.category || "Прочее";
+                    if (!acc[device]) acc[device] = {};
+                    if (!acc[device][assembly]) acc[device][assembly] = {};
+                    if (!acc[device][assembly][category]) acc[device][assembly][category] = [];
+                    acc[device][assembly][category].push(item);
+                    return acc;
+                  }, {});
+
+                  return (
+                    <div className="space-y-4">
+                      {Object.entries(grouped).map(([device, assemblies]) => (
+                        <div key={device} className="border border-slate-200 rounded-xl p-4 bg-white">
+                          <h3 className="font-bold text-sm text-slate-900 border-b pb-2 mb-2">Устройство: {device}</h3>
+                          {Object.entries(assemblies).map(([assembly, categories]) => (
+                            <div key={assembly} className="ml-4 mt-2">
+                              <h4 className="font-semibold text-xs text-slate-700 italic">Сборочная единица: {assembly}</h4>
+                              {Object.entries(categories).map(([category, items]) => (
+                                <div key={category} className="ml-4 mt-1 mb-2">
+                                  <p className="text-[10px] font-bold uppercase text-slate-400">{category}</p>
+                                  <ul className="space-y-1">
+                                    {items.map((mat) => (
+                                      <li key={mat.id} className="text-xs text-slate-600 flex justify-between gap-4">
+                                        <span className="min-w-0">
+                                          <span className="font-semibold text-slate-800">{mat.name}</span>
+                                          <span className="block text-[10px] text-slate-400">
+                                            {mat.item_type === "purchased_product" ? "Покупное изделие/узел" :
+                                             mat.item_type === "unresolved_purchase" ? "Непривязанная позиция" :
+                                             "Покупной компонент"}
+                                            {mat.sku && mat.sku !== "—" ? ` · ${mat.sku}` : ""}
+                                            {mat.designators ? ` · ${mat.designators}` : ""}
+                                          </span>
+                                        </span>
+                                        <span className="font-bold shrink-0">{mat.qty} шт.</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
         </div>
-      );
-    })()
-  )}
-</div>
+      )}
 
       {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ЗАКАЗА */}
       {isModalOpen && (
