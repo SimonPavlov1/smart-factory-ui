@@ -66,7 +66,15 @@ const Icons = {
   ),
 };
 
-export default function Sidebar({ activePage, setActivePage }) {
+const ROLE_LABELS = {
+  admin: "Администратор",
+  warehouse: "Кладовщик",
+  manager: "Менеджер",
+  engineer: "Технолог",
+  production: "Производство",
+};
+
+export default function Sidebar({ activePage, setActivePage, user, onLogout, canOpen }) {
   const menuItems = [
     { id: 'Панель', icon: Icons.Panel },
     { id: 'Все заявки', icon: Icons.Applications },
@@ -90,7 +98,7 @@ export default function Sidebar({ activePage, setActivePage }) {
       </div>
 
       <nav className="flex-1 space-y-2 text-lg">
-        {menuItems.map((item) => {
+        {menuItems.filter((item) => !canOpen || canOpen(item.id)).map((item) => {
           const isActive = activePage === item.id;
           const IconComponent = item.icon;
 
@@ -124,12 +132,15 @@ export default function Sidebar({ activePage, setActivePage }) {
 
       <div
         className="mt-auto pt-8 border-t border-slate-100 flex items-center gap-3 text-[#7D8592] hover:text-red-500 cursor-pointer transition-colors group"
-        onClick={() => console.log('Logout clicked')}
+        onClick={onLogout}
       >
         <div className="w-6 h-6 text-[#7D8592] group-hover:text-red-500 transition-colors">
           <Icons.Logout />
         </div>
-        <span className="font-medium">Выход</span>
+        <div>
+          <div className="font-medium">Выход</div>
+          {user && <div className="text-[10px] text-slate-400">{user.username} · {ROLE_LABELS[user.role] || user.role}</div>}
+        </div>
       </div>
     </aside>
   );
