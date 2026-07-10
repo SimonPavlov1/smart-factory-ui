@@ -72,6 +72,9 @@ const BOMRow = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [availableComponents, setAvailableComponents] = useState([]);
   const [availableProducts, setAvailableProducts] = useState([]);
+  const [matchCandidates, setMatchCandidates] = useState([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [warehouseSearch, setWarehouseSearch] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -79,6 +82,26 @@ const BOMRow = ({
   const [editQty, setEditQty] = useState(item?.quantity || 1);
   const [editDesignators, setEditDesignators] = useState(item?.designators || "");
   const [isSaving, setIsSaving] = useState(false);
+  const bomDesignName = item?.design_name || item?.name || "Без названия";
+
+  useEffect(() => {
+    if (!showDropdown || matchCandidates.length > 0) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          q: warehouseSearch || bomDesignName,
+          limit: "25"
+        });
+        const res = await fetch(`/api/inventory/components/search?${params.toString()}`);
+        if (res.ok) setAvailableComponents(await res.json());
+      } catch (err) {
+        console.error(err);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [showDropdown, warehouseSearch, matchCandidates.length, bomDesignName]);
 
   if (!item) return null;
 
@@ -89,7 +112,6 @@ const BOMRow = ({
 
   const isSub = !!subProductData;
 
-  const bomDesignName = item.design_name || item.name || "Без названия";
   const hasWarehouseLink = item.resource_id !== null && item.resource !== null;
   const warehouseName = item.resource?.name || "";
   const warehousePartNumber = item.resource?.part_number || item.resource?.drawing_number || "";
@@ -134,8 +156,10 @@ const BOMRow = ({
   const handleOpenDropdown = async () => {
     if (showDropdown) { setShowDropdown(false); return; }
     try {
+      setMatchCandidates([]);
+      setWarehouseSearch(bomDesignName);
       const [resComponents, resProducts] = await Promise.all([
-        fetch("/api/inventory/components"),
+        fetch(`/api/inventory/components/search?q=${encodeURIComponent(bomDesignName)}&limit=25`),
         fetch("/api/production/products")
       ]);
       if (resComponents.ok && resProducts.ok) {
@@ -144,6 +168,25 @@ const BOMRow = ({
         setShowDropdown(true);
       }
     } catch (err) { console.error(err); }
+  };
+
+  const handleLoadCandidates = async () => {
+    if (showDropdown) { setShowDropdown(false); return; }
+    setCandidatesLoading(true);
+    try {
+      const res = await fetch(`/api/production/bom-items/${item.id}/match-candidates`);
+      if (res.ok) {
+        const data = await res.json();
+        setMatchCandidates(Array.isArray(data.candidates) ? data.candidates : []);
+        setAvailableComponents([]);
+        setAvailableProducts([]);
+        setShowDropdown(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCandidatesLoading(false);
+    }
   };
 
   // ОБНОВЛЕННЫЙ МЕТОД: Может принимать null для resourceId (сброс привязки)
@@ -182,11 +225,18 @@ const BOMRow = ({
     if (!editName.trim()) return alert("Наименование обязательно");
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/production/bom-items/${item.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ design_name: editName, quantity: Number(editQty), designators: editDesignators || "" })
-      });
+	      const res = await fetch(`/api/production/bom-items/${item.id}`, {
+	        method: "PUT",
+	        headers: { "Content-Type": "application/json" },
+	        body: JSON.stringify({
+            design_name: editName,
+            quantity: Number(editQty),
+            designators: editDesignators || "",
+            resource_id: item.resource_id,
+            resource_type: item.resource_type || "raw_string",
+            is_resolved: item.is_resolved
+          })
+	      });
       if (res.ok) { setIsEditing(false); if (onResolveSuccess) onResolveSuccess(); }
     } catch (err) { console.error(err); } finally { setIsSaving(false); }
   };
@@ -268,12 +318,15 @@ const BOMRow = ({
                       </button>
                     )}
                   </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-medium text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded">Не привязано</span>
-                    <button type="button" onClick={handleOpenDropdown} className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline">Привязать</button>
-                  </div>
-                )}
+	                ) : (
+	                  <div className="flex flex-wrap items-center gap-2">
+	                    <span className="text-[10px] font-medium text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded">Не привязано</span>
+	                    <button type="button" onClick={handleLoadCandidates} disabled={candidatesLoading} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold underline disabled:text-slate-400">
+	                      {candidatesLoading ? "Подбор..." : "Подобрать"}
+	                    </button>
+	                    <button type="button" onClick={handleOpenDropdown} className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline">Вручную</button>
+	                  </div>
+	                )}
 
                 {/* Универсальный выпадающий список выбора (работает и на привязку, и на переопределение) */}
                 {showDropdown && (
@@ -282,22 +335,57 @@ const BOMRow = ({
                       <span className="text-[9px] font-bold text-slate-400 uppercase">Выберите позицию</span>
                       <button type="button" onClick={() => setShowDropdown(false)} className="text-slate-400 hover:text-slate-600"><Icons.Close className="w-3 h-3" /></button>
                     </div>
-                    <div className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded uppercase my-1">Сборочные единицы (Узлы):</div>
-                    {availableProducts.filter(p => p.id !== item.product_id).map(prod => (
-                      <button key={prod.id} type="button" onClick={() => handleAssignResource(prod.id, "product")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
-                        <span className="text-xs font-medium text-slate-800">{prod.name}</span>
-                        {prod.drawing_number && <span className="text-[9px] font-mono text-slate-400">{prod.drawing_number}</span>}
-                      </button>
-                    ))}
-                    <div className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded uppercase my-1 mt-2">Складские компоненты:</div>
-                    {availableComponents.map(comp => (
-                      <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
-                        <span className="text-xs font-medium text-slate-800">{comp.name}</span>
-                        {comp.part_number && <span className="text-[9px] font-mono text-slate-400">{comp.part_number}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
+	                    {matchCandidates.length > 0 && (
+	                      <>
+	                        <div className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded uppercase my-1">Умный подбор:</div>
+	                        {matchCandidates.map(comp => (
+	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full text-left p-2 rounded-md hover:bg-emerald-50 flex flex-col">
+	                            <span className="text-xs font-medium text-slate-800">{comp.name}</span>
+	                            <span className="text-[9px] font-mono text-slate-400">
+	                              {comp.part_number || "Без артикула"} · {Math.round((comp.score || 0) * 100)}% · {comp.reason}
+	                            </span>
+	                          </button>
+	                        ))}
+	                      </>
+	                    )}
+	                    {matchCandidates.length === 0 && availableProducts.length === 0 && availableComponents.length === 0 && (
+	                      <div className="text-[10px] text-slate-400 px-2 py-3">Кандидаты не найдены.</div>
+	                    )}
+	                    {availableProducts.length > 0 && (
+	                      <>
+	                        <div className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded uppercase my-1">Сборочные единицы (Узлы):</div>
+	                        {availableProducts.filter(p => p.id !== item.product_id).map(prod => (
+	                          <button key={prod.id} type="button" onClick={() => handleAssignResource(prod.id, "product")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
+	                            <span className="text-xs font-medium text-slate-800">{prod.name}</span>
+	                            {prod.drawing_number && <span className="text-[9px] font-mono text-slate-400">{prod.drawing_number}</span>}
+	                          </button>
+	                        ))}
+	                      </>
+	                    )}
+	                    {matchCandidates.length === 0 && (
+	                      <div className="px-1 py-1">
+	                        <input
+	                          type="text"
+	                          value={warehouseSearch}
+	                          onChange={(e) => setWarehouseSearch(e.target.value)}
+	                          placeholder="Поиск по складу..."
+	                          className="w-full p-2 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400"
+	                        />
+	                      </div>
+	                    )}
+	                    {availableComponents.length > 0 && (
+	                      <>
+	                        <div className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded uppercase my-1 mt-2">Складские компоненты:</div>
+	                        {availableComponents.map(comp => (
+	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
+	                            <span className="text-xs font-medium text-slate-800">{comp.name}</span>
+	                            {comp.part_number && <span className="text-[9px] font-mono text-slate-400">{comp.part_number}</span>}
+	                          </button>
+	                        ))}
+	                      </>
+	                    )}
+	                  </div>
+	                )}
               </div>
             </div>
           </div>
