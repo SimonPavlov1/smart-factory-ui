@@ -71,6 +71,12 @@ const ROLE_LABELS = {
   warehouse: "Кладовщик",
   manager: "Менеджер",
   engineer: "Технолог",
+  procurement: "Закупщик",
+  accounting: "Бухгалтерия",
+  assembler: "Сборщик",
+  tester: "Тестировщик",
+  repair_engineer: "Инженер-наладчик",
+  packer: "Упаковщик",
   production: "Производство",
 };
 

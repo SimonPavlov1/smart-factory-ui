@@ -9,7 +9,7 @@ const Icons = {
   Incoming: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
 };
 
-export default function InventoryBase() {
+export default function InventoryBase({ user }) {
   const [components, setComponents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Все");
@@ -59,6 +59,7 @@ export default function InventoryBase() {
     }, {});
 
   const categories = ["Все", ...new Set(components.map(c => c.category).filter(Boolean))];
+  const canEditInventory = ["admin", "warehouse"].includes(user?.role);
 
   if (showForm) {
     return <InventoryForm initialData={editingComponent} onBack={() => { setShowForm(false); setEditingComponent(null); }} onSuccess={() => { setShowForm(false); setEditingComponent(null); fetchComponents(); }} />;
@@ -71,9 +72,11 @@ export default function InventoryBase() {
           <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Склад ТМЦ</h1>
           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Всего номенклатуры: {components.length}</p>
         </div>
-        <button onClick={() => { setEditingComponent(null); setShowForm(true); }} className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all">
-          <Icons.Plus /> Создать позицию
-        </button>
+        {canEditInventory && (
+          <button onClick={() => { setEditingComponent(null); setShowForm(true); }} className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all">
+            <Icons.Plus /> Создать позицию
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-100 mb-8 flex flex-wrap gap-4 items-center">
@@ -111,12 +114,12 @@ export default function InventoryBase() {
                   {editingQtyId === comp.id ? (
                     <input type="number" autoFocus className="w-20 p-1 text-sm font-black border-b-2 border-slate-900 outline-none" value={tempQty} onChange={(e) => setTempQty(e.target.value)} onBlur={() => handleUpdateQty(comp.id, tempQty)} onKeyDown={(e) => e.key === 'Enter' && handleUpdateQty(comp.id, tempQty)} />
                   ) : (
-                    <span onClick={() => { setEditingQtyId(comp.id); setTempQty(comp.quantity || 0); }} className={`font-black text-sm cursor-pointer hover:text-slate-900 transition-colors ${comp.quantity > 0 ? "text-slate-900" : "text-rose-500"}`} title="Нажмите для редактирования">
+                    <span onClick={() => { if (canEditInventory) { setEditingQtyId(comp.id); setTempQty(comp.quantity || 0); } }} className={`font-black text-sm ${canEditInventory ? "cursor-pointer hover:text-slate-900" : ""} transition-colors ${comp.quantity > 0 ? "text-slate-900" : "text-rose-500"}`} title={canEditInventory ? "Нажмите для редактирования" : "Остаток на складе"}>
                       {comp.quantity || 0} шт.
                     </span>
                   )}
 
-                  <div className="flex items-center gap-1">
+                  {canEditInventory && <div className="flex items-center gap-1">
                     {incomingCompId === comp.id ? (
                       <form onSubmit={(e) => handleIncomingSubmit(e, comp.id)} className="flex items-center gap-1">
                         <input type="number" className="w-12 p-1 text-[10px] border border-slate-200 rounded-lg" value={incomingQty} onChange={(e) => setIncomingQty(e.target.value)} />
@@ -129,7 +132,7 @@ export default function InventoryBase() {
                         <button onClick={() => handleDelete(comp.id)} className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"><Icons.Trash /></button>
                       </>
                     )}
-                  </div>
+                  </div>}
                 </div>
               </div>
             ))}
