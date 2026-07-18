@@ -378,7 +378,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const showComponentChecklist = ["procurement_purchase", "warehouse_receive_components"].includes(task.type);
   const deliveries = completionPayload.deliveries || [];
   const isAssignedToMe = task.assigned_user_id === user?.id;
-  const canTake = task.status !== "done" && (isAssignedToMe || (!task.assigned_user_id && (task.role === user?.role || canManageTasks(user))));
+  const canTake = ["assigned", "open"].includes(task.status) && (isAssignedToMe || (!task.assigned_user_id && (task.role === user?.role || canManageTasks(user))));
   const canComplete = ["in_progress", "open"].includes(task.status) && (canManageTasks(user) || task.assigned_user_id === user?.id);
 
   return (
@@ -406,7 +406,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
         <div className="p-6 overflow-y-auto space-y-6">
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
 
-          {(canTake || canManageTasks(user)) && task.status !== "done" && (
+          {(canTake || canManageTasks(user)) && !["done", "waiting_delivery"].includes(task.status) && (
             <section className="bg-slate-50 border border-slate-100 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3 items-end">
               <div>
                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Исполнитель</h3>
