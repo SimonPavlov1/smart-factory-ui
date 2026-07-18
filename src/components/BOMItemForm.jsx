@@ -1,58 +1,79 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
-export default function BOMItemForm({ productId, onBack, onSuccess }) {
+const itemTypes = [
+  { id: "component", label: "Покупная позиция" },
+  { id: "assembly", label: "Сборочная единица" },
+  { id: "operation", label: "Работа" },
+];
+
+function flattenTree(items = [], level = 0, result = []) {
+  items.forEach((item) => {
+    result.push({ ...item, level });
+    if (item.children?.length) flattenTree(item.children, level + 1, result);
+  });
+  return result;
+}
+
+export default function BOMItemForm({ productId, productTree = [], onBack, onSuccess }) {
   const [designName, setDesignName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [designators, setDesignators] = useState("");
-  const [isAssembly, setIsAssembly] = useState(false); // Покупное или Сборочная единица
+  const [itemType, setItemType] = useState("component");
+  const [parentId, setParentId] = useState("");
+  const [operationRole, setOperationRole] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const parentOptions = useMemo(
+    () => flattenTree(productTree).filter((item) => item.item_type === "assembly"),
+    [productTree]
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     let finalResourceId = null;
-    let finalResourceType = "raw_string";
+    let finalResourceType = itemType === "operation" ? "operation" : "raw_string";
     const cleanedName = designName.trim();
 
     try {
-      // ЕСЛИ ПОЛЬЗОВАТЕЛЬ СОЗДАЕТ СБОРOЧНУЮ ЕДИНИЦУ (УЗЕЛ)
-      if (isAssembly) {
+      if (itemType === "assembly") {
         finalResourceType = "product";
 
-        // 1. Автоматически создаем этот узел как самостоятельное изделие в базе данных
         const createProductRes = await fetch("/api/production/setup-product", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: cleanedName,
-            drawing_number: `СПЕЦ.${Math.floor(1000 + Math.random() * 9000)}`, // Авто-номер чертежа
+            drawing_number: `СПЕЦ.${Math.floor(1000 + Math.random() * 9000)}`,
             version: "1.0",
-            is_final: false, // Строго указываем, что это НЕ финальное изделие (т.е. узел)
+            is_final: false,
             components: []
           })
         });
 
         if (!createProductRes.ok) {
-          throw new Error("Не удалось автоматически сгенерировать сборочную единицу в базе.");
+          throw new Error("Не удалось создать сборочную единицу в базе.");
         }
 
         const createdProduct = await createProductRes.json();
         finalResourceId = createdProduct.id;
       }
 
-      // 2. Формируем строку спецификации для текущего родительского устройства
       const newItem = {
         design_name: cleanedName,
         quantity: Number(quantity),
         designators: designators.trim(),
-        is_assembly: isAssembly,
+        is_assembly: itemType === "assembly",
+        item_type: itemType,
+        parent_id: parentId ? Number(parentId) : null,
+        operation_role: itemType === "operation" ? operationRole.trim() : null,
+        sort_order: 0,
         resource_id: finalResourceId,
         resource_type: finalResourceType,
-        is_resolved: isAssembly // Если узел только что создан, он автоматически считается разрешенным внутренним ресурсом
+        is_resolved: itemType === "assembly" || itemType === "operation"
       };
 
-      // Отправляем позицию в BOM текущего устройства
       const response = await fetch(`/api/production/process-bom/${productId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,7 +81,6 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
       });
 
       if (response.ok) {
-        alert(isAssembly ? `Сборочная единица "${cleanedName}" успешно создана!` : "Покупное изделие добавлено!");
         onSuccess();
         onBack();
       } else {
@@ -76,10 +96,10 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
   };
 
   return (
-    <div className="p-5 sm:p-6 max-w-xl mx-auto bg-white rounded-xl border border-slate-200 my-4 shadow-xs font-sans text-slate-800">
+    <div className="p-5 sm:p-6 max-w-2xl mx-auto bg-white rounded-xl border border-slate-200 my-4 shadow-xs font-sans text-slate-800">
       <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Внедрение позиции в спецификацию
+          Новая строка состава изделия
         </h3>
         <button onClick={onBack} type="button" className="text-slate-400 hover:text-slate-600 text-xs font-semibold transition-colors">
           Закрыть
@@ -87,50 +107,75 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* ПЕРЕКЛЮЧАТЕЛЬ ТИПА ПОЗИЦИИ */}
-        <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setIsAssembly(false)}
-            className={`py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-              !isAssembly ? "bg-white text-slate-900 shadow-xs border border-slate-200/50" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Покупное изделие
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsAssembly(true)}
-            className={`py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-              isAssembly ? "bg-indigo-600 text-white shadow-xs" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Сборочная единица
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 p-1 bg-slate-100 rounded-lg">
+          {itemTypes.map((type) => (
+            <button
+              key={type.id}
+              type="button"
+              onClick={() => setItemType(type.id)}
+              className={`py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
+                itemType === type.id ? "bg-white text-slate-900 shadow-xs border border-slate-200/50" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {type.label}
+            </button>
+          ))}
         </div>
 
-        {/* НАИМЕНОВАНИЕ */}
         <div>
           <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
-            {isAssembly ? "Название новой сборочной единицы (платы, модуля) *" : "Наименование покупного изделия (для подбора) *"}
+            Родительская сборочная единица
+          </label>
+          <select
+            value={parentId}
+            onChange={(e) => setParentId(e.target.value)}
+            className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 bg-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="">Верхний уровень изделия</option>
+            {parentOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {"- ".repeat(item.level)}{item.design_name || item.resource?.name || "Без названия"}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
+            {itemType === "assembly" ? "Название сборочной единицы *" : itemType === "operation" ? "Название работы *" : "Наименование покупной позиции *"}
           </label>
           <input
             type="text"
             required
             value={designName}
             onChange={(e) => setDesignName(e.target.value)}
-            placeholder={isAssembly ? "Например: Плата дисплея ЦП" : "Например: Резистор 10 кОм 0805"}
+            placeholder={itemType === "assembly" ? "Например: Плата УТУД" : itemType === "operation" ? "Например: Гравировка корпуса" : "Например: Антенна Fakra"}
             className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 font-medium bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
           />
         </div>
 
-        {/* КОЛИЧЕСТВО И ОБОЗНАЧЕНИЯ */}
+        {itemType === "operation" && (
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
+              Исполнительная роль или участок
+            </label>
+            <input
+              type="text"
+              value={operationRole}
+              onChange={(e) => setOperationRole(e.target.value)}
+              placeholder="Например: сборщик, маляр, оператор лазера"
+              className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 bg-white focus:outline-none focus:border-blue-500 placeholder-slate-400"
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">Кол-во *</label>
             <input
               type="number"
-              min="1"
+              min="0.001"
+              step="0.001"
               required
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
@@ -153,11 +198,9 @@ export default function BOMItemForm({ productId, onBack, onSuccess }) {
         <button
           type="submit"
           disabled={loading}
-          className={`w-full text-white p-3 rounded-lg font-bold uppercase text-xs tracking-wider mt-1 transition-all ${
-            isAssembly ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-900 hover:bg-slate-800"
-          } disabled:bg-slate-200 disabled:text-slate-400`}
+          className="w-full text-white p-3 rounded-lg font-bold uppercase text-xs tracking-wider mt-1 transition-all bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
         >
-          {loading ? "Создание и привязка..." : "Внедрить в устройство"}
+          {loading ? "Сохранение..." : "Добавить в состав изделия"}
         </button>
       </form>
     </div>

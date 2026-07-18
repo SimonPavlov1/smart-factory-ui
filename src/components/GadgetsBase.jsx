@@ -54,7 +54,165 @@ const Icons = {
     <svg className="w-3.5 h-3.5 mr-1 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
     </svg>
+  ),
+  File: () => (
+    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  Photo: () => (
+    <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
   )
+};
+
+const ProductFilesPanel = ({ product, onChanged }) => {
+  const [uploading, setUploading] = useState("");
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const attachments = product.attachments || [];
+
+  useEffect(() => {
+    let objectUrl = "";
+    let cancelled = false;
+
+    const loadPhoto = async () => {
+      setPhotoPreviewUrl("");
+      if (!product.photo_url) return;
+
+      const res = await fetch(`/api/production${product.photo_url}`);
+      if (!res.ok) return;
+
+      const blob = await res.blob();
+      if (cancelled) return;
+      objectUrl = window.URL.createObjectURL(blob);
+      setPhotoPreviewUrl(objectUrl);
+    };
+
+    loadPhoto();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+    };
+  }, [product.photo_url]);
+
+  const upload = async (file, endpoint) => {
+    if (!file) return;
+    setUploading(endpoint);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/production/products/${product.id}/${endpoint}`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || "Не удалось загрузить файл");
+        return;
+      }
+      onChanged();
+    } finally {
+      setUploading("");
+    }
+  };
+
+  const download = async (file) => {
+    const res = await fetch(`/api/production${file.url}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.original_name || "file";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const openFile = async (file) => {
+    const res = await fetch(`/api/production${file.url}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
+  };
+
+  const removeAttachment = async (file) => {
+    if (!window.confirm(`Удалить файл "${file.original_name}"?`)) return;
+    const res = await fetch(`/api/production/products/${product.id}/attachments/${encodeURIComponent(file.stored_name)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) onChanged();
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 mb-6">
+      <div className="border border-slate-200 rounded-xl bg-white p-3">
+        <div className="aspect-[4/3] bg-slate-50 border border-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
+          {photoPreviewUrl ? (
+            <img
+              src={photoPreviewUrl}
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
+              <Icons.Photo />
+              <span>Фото не загружено</span>
+            </div>
+          )}
+        </div>
+        <label className="mt-3 flex items-center justify-center px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
+          {uploading === "photo" ? "Загрузка..." : "Загрузить фото"}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => upload(e.target.files?.[0], "photo")} />
+        </label>
+      </div>
+
+      <div className="border border-slate-200 rounded-xl bg-white p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Файлы изделия</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Сборочные чертежи, КД, составы, инструкции и прочие документы</p>
+          </div>
+          <label className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 cursor-pointer text-center">
+            {uploading === "attachments" ? "Загрузка..." : "+ Документ"}
+            <input type="file" className="hidden" onChange={(e) => upload(e.target.files?.[0], "attachments")} />
+          </label>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {attachments.length === 0 && (
+            <div className="text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg p-4 bg-slate-50">
+              Документы еще не прикреплены.
+            </div>
+          )}
+          {attachments.map((file) => (
+            <div key={file.stored_name} className="flex items-center justify-between gap-3 border border-slate-100 rounded-lg p-2">
+              <button type="button" onClick={() => openFile(file)} className="flex items-center gap-2 min-w-0 text-left">
+                <Icons.File />
+                <span className="text-xs font-medium text-blue-600 hover:text-blue-700 truncate">{file.original_name}</span>
+              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button type="button" onClick={() => openFile(file)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-700">
+                  Открыть
+                </button>
+                <button type="button" onClick={() => download(file)} className="text-[10px] font-semibold text-slate-500 hover:text-slate-700">
+                  Скачать
+                </button>
+                <button type="button" onClick={() => removeAttachment(file)} className="text-[10px] font-semibold text-slate-400 hover:text-rose-600">
+                  Удалить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // РЕКУРСИВНАЯ СТРОКА BOM (СТРОГИЙ ДИЗАЙН, С ВОЗМОЖНОСТЬЮ ПЕРЕОПРЕДЕЛЕНИЯ И СБРОСА)
@@ -110,10 +268,13 @@ const BOMRow = ({
     ? productsList.find(p => p.id === item.resource_id)
     : null;
 
-  const isSub = !!subProductData;
+  const itemType = item.item_type || ((item.resource_type === "product" || item.resource_type === "subassembly") ? "assembly" : "component");
+  const isOperation = itemType === "operation";
+  const isSub = itemType === "assembly" || !!subProductData;
+  const directChildren = item.children || [];
 
-  const hasWarehouseLink = item.resource_id !== null && item.resource !== null;
-  const warehouseName = item.resource?.name || "";
+  const hasWarehouseLink = isOperation || (item.resource_id !== null && item.resource !== null);
+  const warehouseName = isOperation ? (item.operation_role || "Работа / операция") : (item.resource?.name || "");
   const warehousePartNumber = item.resource?.part_number || item.resource?.drawing_number || "";
 
   // --- ЛОГИКА ФИЛЬТРАЦИИ ---
@@ -130,18 +291,38 @@ const BOMRow = ({
 
   const matchesCategory =
     selectedCategory === "all" ||
-    parentSectionName === selectedCategory;
+    parentSectionName === selectedCategory ||
+    parentSectionName === "Дерево состава";
 
   const currentItemMatches = matchesSearch && matchesStatus && matchesCategory;
 
+  const treeNodeMatches = (subItem) => {
+    const subType = subItem.item_type || ((subItem.resource_type === "product" || subItem.resource_type === "subassembly") ? "assembly" : "component");
+    const subHasLink = subType === "operation" || (subItem.resource_id !== null && subItem.resource !== null);
+    const sSearch = (subItem.design_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (subItem.designators || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (subItem.resource?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (subItem.operation_role || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const sStatus = statusFilter === "all" ||
+                    (statusFilter === "resolved" && subHasLink) ||
+                    (statusFilter === "unresolved" && !subHasLink);
+
+    return (sSearch && sStatus) || subItem.children?.some(treeNodeMatches);
+  };
+
   let hasMatchingChildren = false;
+  if (directChildren.length) {
+    hasMatchingChildren = directChildren.some(treeNodeMatches);
+  }
   if (isSub && subProductData.sections) {
-    hasMatchingChildren = subProductData.sections.some(section =>
+    hasMatchingChildren = hasMatchingChildren || subProductData.sections.some(section =>
       section.items?.some(subItem => {
-        const subHasLink = subItem.resource_id !== null && subItem.resource !== null;
+        const subType = subItem.item_type || ((subItem.resource_type === "product" || subItem.resource_type === "subassembly") ? "assembly" : "component");
+        const subHasLink = subType === "operation" || (subItem.resource_id !== null && subItem.resource !== null);
         const sSearch = (subItem.design_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                         (subItem.designators || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (subItem.resource?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
+                        (subItem.resource?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (subItem.operation_role || "").toLowerCase().includes(searchQuery.toLowerCase());
         const sStatus = statusFilter === "all" ||
                         (statusFilter === "resolved" && subHasLink) ||
                         (statusFilter === "unresolved" && !subHasLink);
@@ -154,6 +335,7 @@ const BOMRow = ({
   if (!currentItemMatches && !hasMatchingChildren) return null;
 
   const handleOpenDropdown = async () => {
+    if (isOperation) return;
     if (showDropdown) { setShowDropdown(false); return; }
     try {
       setMatchCandidates([]);
@@ -171,6 +353,7 @@ const BOMRow = ({
   };
 
   const handleLoadCandidates = async () => {
+    if (isOperation) return;
     if (showDropdown) { setShowDropdown(false); return; }
     setCandidatesLoading(true);
     try {
@@ -191,6 +374,10 @@ const BOMRow = ({
 
   // ОБНОВЛЕННЫЙ МЕТОД: Может принимать null для resourceId (сброс привязки)
   const handleAssignResource = async (resourceId, resourceType) => {
+    const nextItemType = resourceId === null
+      ? itemType
+      : (resourceType === "product" || resourceType === "subassembly" ? "assembly" : "component");
+
     try {
       const res = await fetch(`/api/production/bom-items/${item.id}`, {
         method: "PUT",
@@ -201,6 +388,10 @@ const BOMRow = ({
           designators: item.designators,
           resource_id: resourceId,
           resource_type: resourceType,
+          item_type: nextItemType,
+          parent_id: item.parent_id || null,
+          operation_role: item.operation_role || null,
+          sort_order: item.sort_order || 0,
           is_resolved: resourceId !== null
         })
       });
@@ -234,6 +425,10 @@ const BOMRow = ({
             designators: editDesignators || "",
             resource_id: item.resource_id,
             resource_type: item.resource_type || "raw_string",
+            item_type: itemType,
+            parent_id: item.parent_id || null,
+            operation_role: isOperation ? item.operation_role : null,
+            sort_order: item.sort_order || 0,
             is_resolved: item.is_resolved
           })
 	      });
@@ -268,19 +463,21 @@ const BOMRow = ({
 
   return (
     <div className={`flex flex-col gap-1.5 relative w-full ${isDeleting ? "opacity-30 pointer-events-none" : ""} ${!currentItemMatches ? "opacity-40" : ""}`}>
-      <div
-        className={`bg-white p-3 sm:p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all ${
-          isSub 
+        <div
+          className={`bg-white p-3 sm:p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all ${
+          isSub
             ? "border-l-4 border-l-indigo-500 bg-indigo-50/5 border-slate-200 shadow-xs" 
+            : isOperation
+            ? "border-l-4 border-l-amber-500 bg-amber-50/10 border-slate-200 shadow-xs"
             : "border-slate-200 hover:border-slate-300 shadow-xs"
         }`}
         style={{ marginLeft: `${level * 20}px` }}
       >
         <div className="flex items-start sm:items-center gap-3 flex-1 w-full min-w-0">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
-            isSub ? "bg-indigo-50 border-indigo-100" : hasWarehouseLink ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-100"
+            isSub ? "bg-indigo-50 border-indigo-100" : isOperation ? "bg-amber-50 border-amber-100 text-amber-600" : hasWarehouseLink ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-100"
           }`}>
-            {isSub ? <Icons.Puzzle className="w-4 h-4 text-indigo-600" /> : hasWarehouseLink ? <Icons.Check /> : <Icons.Alert />}
+            {isSub ? <Icons.Puzzle className="w-4 h-4 text-indigo-600" /> : isOperation ? <Icons.Settings /> : hasWarehouseLink ? <Icons.Check /> : <Icons.Alert />}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 w-full min-w-0">
@@ -300,14 +497,18 @@ const BOMRow = ({
                 {hasWarehouseLink ? (
                   <div className="flex justify-between items-center w-full min-w-0 gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-semibold truncate ${isSub ? "text-indigo-600" : "text-emerald-700"}`}>{warehouseName}</p>
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">{warehousePartNumber}</p>
+                      <p className={`text-xs font-semibold truncate ${isSub ? "text-indigo-600" : isOperation ? "text-amber-700" : "text-emerald-700"}`}>{warehouseName}</p>
+                      <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                        {isOperation ? "Операция в техпроцессе" : warehousePartNumber}
+                      </p>
 
                       {/* Опции изменения и сброса для уже привязанного элемента */}
-                      <div className="flex gap-2.5 mt-1">
+                      {!isOperation && (
+                        <div className="flex gap-2.5 mt-1">
                         <button type="button" onClick={handleOpenDropdown} className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline">Изменить</button>
                         <button type="button" onClick={() => handleAssignResource(null, "raw_string")} className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold underline">Отвязать</button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                     {isSub && (
                       <button
@@ -406,16 +607,37 @@ const BOMRow = ({
         </div>
       </div>
 
+      {directChildren.length > 0 && (
+        <div className="flex flex-col gap-1.5 mt-1 border-l-2 border-dashed border-slate-200 ml-3 pl-3 w-full">
+          {directChildren.map((child) => (
+            <BOMRow
+              key={child.id}
+              item={child}
+              productsList={productsList}
+              onResolveSuccess={onResolveSuccess}
+              onDrillDown={onDrillDown}
+              level={level + 1}
+              searchQuery={searchQuery}
+              statusFilter={statusFilter}
+              selectedCategory={selectedCategory}
+              parentSectionName={parentSectionName || "Вложенные позиции"}
+            />
+          ))}
+        </div>
+      )}
+
       {isSub && subProductData.sections && (
         <div className="flex flex-col gap-4 mt-1 border-l-2 border-dashed border-indigo-200 ml-3 pl-3 w-full">
           {subProductData.sections
             .filter(section => selectedCategory === "all" || section.name === selectedCategory)
             .map((section) => {
               const hasVisibleItems = section.items?.some(subItem => {
-                const subHasLink = subItem.resource_id !== null && subItem.resource !== null;
+                const subType = subItem.item_type || ((subItem.resource_type === "product" || subItem.resource_type === "subassembly") ? "assembly" : "component");
+                const subHasLink = subType === "operation" || (subItem.resource_id !== null && subItem.resource !== null);
                 const sSearch = (subItem.design_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                                 (subItem.designators || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                (subItem.resource?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
+                                (subItem.resource?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                (subItem.operation_role || "").toLowerCase().includes(searchQuery.toLowerCase());
                 const sStatus = statusFilter === "all" ||
                                 (statusFilter === "resolved" && subHasLink) ||
                                 (statusFilter === "unresolved" && !subHasLink);
@@ -534,6 +756,9 @@ export default function GadgetsBase() {
   // СБОР ВСЕХ ДИНАМИЧЕСКИХ КАТЕГОРИЙ
   const availableCategoriesInProduct = ["all"];
   if (viewingProduct) {
+    if (viewingProduct.tree?.length) {
+      availableCategoriesInProduct.push("Дерево состава");
+    }
     viewingProduct.sections?.forEach(sec => {
       if (sec.name && !availableCategoriesInProduct.includes(sec.name)) {
         availableCategoriesInProduct.push(sec.name);
@@ -595,6 +820,8 @@ export default function GadgetsBase() {
             <button onClick={() => setShowBOMForm(true)} className="flex-1 md:flex-none px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs uppercase tracking-wider rounded-lg shadow-xs transition-colors">+ Позиция</button>
           </div>
         </div>
+
+        <ProductFilesPanel product={viewingProduct} onChanged={fetchProducts} />
 
         {/* Строгая фильтр-панель */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 flex flex-col gap-4">
@@ -664,13 +891,42 @@ export default function GadgetsBase() {
 
         {showBOMForm && (
           <div className="mb-6">
-            <BOMItemForm productId={viewingProduct.id} onBack={() => setShowBOMForm(false)} onSuccess={fetchProducts} />
+            <BOMItemForm
+              productId={viewingProduct.id}
+              productTree={viewingProduct.tree || []}
+              onBack={() => setShowBOMForm(false)}
+              onSuccess={fetchProducts}
+            />
           </div>
         )}
 
-        {/* Вывод дерева дерева спецификации */}
+        {/* Вывод дерева спецификации */}
         <div className="flex flex-col gap-6 w-full">
-          {viewingProduct.sections && viewingProduct.sections.length > 0 ? (
+          {viewingProduct.tree && viewingProduct.tree.length > 0 ? (
+            <div className="flex flex-col gap-2 w-full">
+              {selectedCategory === "all" && (
+                <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-100 pb-1 flex items-center gap-1.5">
+                  <Icons.ChevronRight />
+                  <span>Дерево состава</span>
+                </div>
+              )}
+              <div className="flex flex-col gap-2 w-full">
+                {viewingProduct.tree.map((item) => (
+                  <BOMRow
+                    key={item.id}
+                    item={item}
+                    productsList={products}
+                    onResolveSuccess={fetchProducts}
+                    onDrillDown={handleDrillDown}
+                    searchQuery={searchQuery}
+                    statusFilter={statusFilter}
+                    selectedCategory={selectedCategory}
+                    parentSectionName="Дерево состава"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : viewingProduct.sections && viewingProduct.sections.length > 0 ? (
             viewingProduct.sections
               .filter(section => selectedCategory === "all" || section.name === selectedCategory)
               .map((section) => {
