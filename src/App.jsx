@@ -824,7 +824,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
   );
 }
 
-function Personnel() {
+function Personnel({ currentUser }) {
   const [users, setUsers] = useState([]);
   const emptyForm = {
     password: "",
@@ -1048,6 +1048,26 @@ function Personnel() {
     setSavingId(null);
   };
 
+  const deleteUser = async (user) => {
+    if (currentUser?.id === user.id) {
+      setError("Нельзя удалить текущую учетную запись");
+      return;
+    }
+    if (!window.confirm(`Удалить сотрудника "${fullName(user)}"? Назначение с его задач будет снято.`)) return;
+
+    setError("");
+    setSavingId(user.id);
+    const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(apiErrorMessage(data, "Не удалось удалить сотрудника"));
+    } else {
+      await fetchUsers();
+      closePanel();
+    }
+    setSavingId(null);
+  };
+
   const selectedDraft = selectedUser ? drafts[selectedUser.id] || {} : {};
   const panel = panelMode && (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
@@ -1195,6 +1215,21 @@ function Personnel() {
                     </button>
                   </div>
                 </div>
+
+                {currentUser?.id !== selectedUser.id && (
+                  <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-4 sm:p-5">
+                    <p className="text-sm font-bold text-rose-700">Удаление сотрудника</p>
+                    <p className="mt-1 text-xs text-rose-500">Сотрудник будет удален, а его назначение с открытых задач будет снято.</p>
+                    <button
+                      type="button"
+                      onClick={() => deleteUser(selectedUser)}
+                      disabled={savingId === selectedUser.id}
+                      className="mt-4 inline-flex min-h-10 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 px-4 text-sm font-semibold text-rose-600 transition-all hover:-translate-y-0.5 hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      {savingId === selectedUser.id ? "Удаление..." : "Удалить сотрудника"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1362,7 +1397,7 @@ export default function App() {
       case "Панель": return <Dashboard user={user} onOpenPage={openPage} />;
       case "Все заявки": return <AllApplications user={user} onOpenPage={openPage} />;
       case "Мои задачи": return <MyTasks user={user} onOpenPage={openPage} />;
-      case "Персонал": return <Personnel />;
+      case "Персонал": return <Personnel currentUser={user} />;
       case "База изделий": return <GadgetsBase />;
       case "Склад ТМЦ": return <InventoryBase user={user} />;
       case "Производство": return <ManufacturingPage />;
