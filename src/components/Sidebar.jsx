@@ -80,7 +80,7 @@ const ROLE_LABELS = {
   production: "Производство",
 };
 
-export default function Sidebar({ activePage, setActivePage, user, onLogout, canOpen }) {
+export default function Sidebar({ activePage, setActivePage, user, onLogout, canOpen, theme = "light", onToggleTheme }) {
   const menuItems = [
     { id: 'Панель', icon: Icons.Panel },
     { id: 'Все заявки', icon: Icons.Applications },
@@ -92,40 +92,40 @@ export default function Sidebar({ activePage, setActivePage, user, onLogout, can
   ];
 
   return (
-    <aside className="w-80 bg-white flex flex-col p-8 rounded-[35px] shadow-sm relative">
+    <aside className="glass-sidebar w-80 shrink-0 flex flex-col p-6 xl:p-8 rounded-[28px] xl:rounded-[35px] relative lg:h-full max-lg:w-full max-lg:p-3 max-lg:rounded-[24px]">
       <div
         onClick={() => setActivePage('Панель')}
-        className="flex items-center gap-3 mb-12 cursor-pointer group"
+        className="flex items-center gap-3 mb-10 cursor-pointer group max-lg:mb-3 max-lg:px-2"
       >
         <div className="text-[#3F8CFF] group-hover:scale-105 transition-transform">
           <Icons.Logo />
         </div>
-        <h2 className="text-[32px] font-bold text-[#3F8CFF] tracking-tight">Проекты</h2>
+        <h2 className="text-[28px] xl:text-[32px] font-bold text-[#3F8CFF] tracking-tight">MES</h2>
       </div>
 
-      <nav className="flex-1 space-y-2 text-lg">
+      <nav className="flex-1 space-y-2 text-base xl:text-lg max-lg:flex max-lg:overflow-x-auto max-lg:space-y-0 max-lg:gap-2 max-lg:pb-1">
         {menuItems.filter((item) => !canOpen || canOpen(item.id)).map((item) => {
           const isActive = activePage === item.id;
           const IconComponent = item.icon;
 
           return (
-            <div key={item.id} className="relative flex items-center group">
+            <div key={item.id} className="relative flex items-center group max-lg:shrink-0">
               <button
                 onClick={() => setActivePage(item.id)}
-                className={`flex-1 flex items-center gap-3 p-4 rounded-2xl font-semibold transition-all ${
+                className={`flex-1 flex items-center gap-3 p-3 xl:p-4 rounded-2xl font-semibold transition-all max-lg:min-w-[138px] max-lg:justify-center ${
                   isActive 
-                    ? "bg-blue-50 text-[#3F8CFF]" 
+                    ? "bg-blue-50 text-[#3F8CFF] shadow-sm" 
                     : "text-[#7D8592] hover:bg-slate-50"
                 }`}
               >
-                <div className="w-6 h-6 flex items-center justify-center">
+                <div className="w-5 h-5 xl:w-6 xl:h-6 flex items-center justify-center">
                   <IconComponent />
                 </div>
-                <span>{item.id}</span>
+                <span className="text-sm xl:text-base whitespace-nowrap">{item.id}</span>
               </button>
 
               {isActive && (
-                <div className="absolute -right-[34px] flex items-center">
+                <div className="absolute -right-[34px] flex items-center max-lg:hidden">
                   <svg width="4" height="44" viewBox="0 0 4 44" >
                     <rect width="4" height="44" rx="2" fill="#3F8CFF"/>
                   </svg>
@@ -136,16 +136,22 @@ export default function Sidebar({ activePage, setActivePage, user, onLogout, can
         })}
       </nav>
 
-      <div
-        className="mt-auto pt-8 border-t border-slate-100 flex items-center gap-3 text-[#7D8592] hover:text-red-500 cursor-pointer transition-colors group"
-        onClick={onLogout}
-      >
-        <div className="w-6 h-6 text-[#7D8592] group-hover:text-red-500 transition-colors">
-          <Icons.Logout />
-        </div>
-        <div>
-          <div className="font-medium">Выход</div>
-          {user && <div className="text-[10px] text-slate-400">{user.username} · {ROLE_LABELS[user.role] || user.role}</div>}
+      <div className="mt-auto pt-6 border-t border-slate-100 space-y-3 max-lg:pt-3 max-lg:grid max-lg:grid-cols-2 max-lg:gap-2 max-lg:space-y-0">
+        <button type="button" onClick={onToggleTheme} className="app-theme-toggle">
+          <span>{theme === "dark" ? "Ночная" : "Дневная"}</span>
+        </button>
+
+        <div
+          className="flex items-center gap-3 text-[#7D8592] hover:text-red-500 cursor-pointer transition-colors group rounded-2xl px-3 py-2 hover:bg-slate-50 max-lg:justify-center"
+          onClick={onLogout}
+        >
+          <div className="w-5 h-5 xl:w-6 xl:h-6 text-[#7D8592] group-hover:text-red-500 transition-colors">
+            <Icons.Logout />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium">Выход</div>
+            {user && <div className="text-[10px] text-slate-400 truncate">{user.username} · {ROLE_LABELS[user.role] || user.role}</div>}
+          </div>
         </div>
       </div>
     </aside>

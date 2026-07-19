@@ -744,7 +744,7 @@ const AllApplications = ({ user, onOpenPage }) => (
 );
 const MyTasks = ({ user, onOpenPage }) => <TaskList endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${ROLE_LABELS[user.role] || user.role}: персональная очередь работ`} onOpenPage={onOpenPage} />;
 
-function LoginPage({ onLogin }) {
+function LoginPage({ onLogin, theme, onToggleTheme }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -779,7 +779,7 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0F5FA] flex items-center justify-center p-6">
+    <div className={`app-shell min-h-screen flex items-center justify-center p-6 ${theme === "dark" ? "theme-dark" : ""}`}>
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-[28px] border border-slate-100 shadow-sm p-8 space-y-5">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Вход в MES</h1>
@@ -799,6 +799,10 @@ function LoginPage({ onLogin }) {
 
         <button disabled={loading} className="w-full bg-slate-900 text-white rounded-xl py-3 font-bold text-xs uppercase tracking-widest disabled:bg-slate-300">
           {loading ? "Вход..." : "Войти"}
+        </button>
+
+        <button type="button" onClick={onToggleTheme} className="app-theme-toggle">
+          {theme === "dark" ? "Ночная тема" : "Дневная тема"}
         </button>
 
         <p className="text-[11px] text-slate-400">Первичная dev-учетка: admin / admin123, если база пользователей пустая.</p>
@@ -897,6 +901,11 @@ export default function App() {
   const [activePage, setActivePage] = useState("Панель");
   const [user, setUser] = useState(null);
   const [booting, setBooting] = useState(true);
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("smart_factory_theme");
+    if (savedTheme) return savedTheme;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   const logout = () => {
     clearToken();
@@ -908,6 +917,11 @@ export default function App() {
     window.addEventListener("auth:logout", onLogout);
     return () => window.removeEventListener("auth:logout", onLogout);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("smart_factory_theme", theme);
+    document.documentElement.classList.toggle("theme-dark", theme === "dark");
+  }, [theme]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -952,13 +966,21 @@ export default function App() {
     }
   };
 
-  if (booting) return <div className="min-h-screen bg-[#F0F5FA]" />;
-  if (!user) return <LoginPage onLogin={setUser} />;
+  if (booting) return <div className={`min-h-screen app-shell ${theme === "dark" ? "theme-dark" : ""}`} />;
+  if (!user) return <LoginPage onLogin={setUser} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
 
   return (
-    <div className="flex h-screen bg-[#F0F5FA] p-5">
-      <Sidebar activePage={activePage} setActivePage={openPage} user={user} onLogout={logout} canOpen={canOpen} />
-      <main className="flex-1 overflow-y-auto">
+    <div className={`app-shell flex h-screen p-5 gap-5 ${theme === "dark" ? "theme-dark" : ""}`}>
+      <Sidebar
+        activePage={activePage}
+        setActivePage={openPage}
+        user={user}
+        onLogout={logout}
+        canOpen={canOpen}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+      />
+      <main className="app-main">
         {renderContent()}
       </main>
     </div>

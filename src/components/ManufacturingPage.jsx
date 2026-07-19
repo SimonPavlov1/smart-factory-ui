@@ -575,18 +575,18 @@ export default function ManufacturingPage() {
   return (
     <div className="p-10 relative">
       {/* Шапка */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Производственные заказы</h1>
           <p className="text-xs text-slate-400 mt-1">Управление сборкой комплексных заказов клиентов</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={fetchOrders} className="text-xs font-bold uppercase text-slate-600 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+          <button onClick={fetchOrders} className="flex-1 sm:flex-none text-xs font-bold uppercase text-slate-600 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
             Обновить
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="text-xs font-bold uppercase text-white bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-xl shadow-sm flex items-center gap-2"
+            className="flex-1 sm:flex-none text-xs font-bold uppercase text-white bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-xl shadow-sm flex items-center justify-center gap-2"
           >
             Создать комплексный заказ
           </button>
@@ -599,9 +599,9 @@ export default function ManufacturingPage() {
       <div className="space-y-4">
         {orders.length > 0 ? (
           orders.map((order) => (
-            <div key={order.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-              <div className="space-y-2 flex-1 mr-4">
-                <div className="flex items-center gap-4">
+            <div key={order.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+              <div className="space-y-2 flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
                   <p className="font-bold text-lg text-slate-900">Заказ #{order.id}</p>
 
 	                  <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
@@ -646,7 +646,7 @@ export default function ManufacturingPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 shrink-0 w-52">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 shrink-0 lg:w-52">
                 <button
                   onClick={() => handleOpenOrder(order)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all text-center"

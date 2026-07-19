@@ -9,6 +9,11 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   ),
+  ChevronDown: ({ className = "w-4 h-4" }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  ),
   Box: ({ className = "w-5 h-5" }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -67,35 +72,20 @@ const Icons = {
   )
 };
 
+const buttonBase = "inline-flex items-center justify-center gap-2 rounded-xl text-[12px] font-semibold border transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0";
+const buttonStyles = {
+  primary: `${buttonBase} bg-[#3F8CFF] hover:bg-[#1f78ff] text-white border-[#3F8CFF] shadow-sm hover:shadow-md`,
+  success: `${buttonBase} bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm hover:shadow-md`,
+  danger: `${buttonBase} bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-100 hover:border-rose-200`,
+  neutral: `${buttonBase} bg-white hover:bg-slate-50 text-slate-600 border-slate-200`,
+  ghost: "inline-flex items-center justify-center gap-1 rounded-lg text-[11px] font-semibold transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0",
+  iconNeutral: "inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-50 text-slate-500 hover:text-[#3F8CFF] border border-slate-200 hover:border-blue-200 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0",
+  iconDanger: "inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-50 text-rose-500 hover:text-rose-700 border border-rose-100 hover:border-rose-200 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0",
+};
+
 const ProductFilesPanel = ({ product, onChanged }) => {
   const [uploading, setUploading] = useState("");
-  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
   const attachments = product.attachments || [];
-
-  useEffect(() => {
-    let objectUrl = "";
-    let cancelled = false;
-
-    const loadPhoto = async () => {
-      setPhotoPreviewUrl("");
-      if (!product.photo_url) return;
-
-      const res = await fetch(`/api/production${product.photo_url}`);
-      if (!res.ok) return;
-
-      const blob = await res.blob();
-      if (cancelled) return;
-      objectUrl = window.URL.createObjectURL(blob);
-      setPhotoPreviewUrl(objectUrl);
-    };
-
-    loadPhoto();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
-    };
-  }, [product.photo_url]);
 
   const upload = async (file, endpoint) => {
     if (!file) return;
@@ -150,35 +140,14 @@ const ProductFilesPanel = ({ product, onChanged }) => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 mb-6">
-      <div className="border border-slate-200 rounded-xl bg-white p-3">
-        <div className="aspect-[4/3] bg-slate-50 border border-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-          {photoPreviewUrl ? (
-            <img
-              src={photoPreviewUrl}
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
-              <Icons.Photo />
-              <span>Фото не загружено</span>
-            </div>
-          )}
-        </div>
-        <label className="mt-3 flex items-center justify-center px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
-          {uploading === "photo" ? "Загрузка..." : "Загрузить фото"}
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => upload(e.target.files?.[0], "photo")} />
-        </label>
-      </div>
-
-      <div className="border border-slate-200 rounded-xl bg-white p-4">
+    <div className="mb-6">
+      <div className="border border-slate-100 rounded-3xl bg-white p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Файлы изделия</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Сборочные чертежи, КД, составы, инструкции и прочие документы</p>
+            <h3 className="text-xl font-black text-slate-900">Файлы изделия</h3>
+            <p className="text-sm text-slate-500 mt-2">Сборочные чертежи, КД, составы, инструкции и прочие документы.</p>
           </div>
-          <label className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 cursor-pointer text-center">
+          <label className={`${buttonStyles.primary} h-9 px-4 cursor-pointer`}>
             {uploading === "attachments" ? "Загрузка..." : "+ Документ"}
             <input type="file" className="hidden" onChange={(e) => upload(e.target.files?.[0], "attachments")} />
           </label>
@@ -191,19 +160,19 @@ const ProductFilesPanel = ({ product, onChanged }) => {
             </div>
           )}
           {attachments.map((file) => (
-            <div key={file.stored_name} className="flex items-center justify-between gap-3 border border-slate-100 rounded-lg p-2">
+            <div key={file.stored_name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-100 rounded-2xl p-3 bg-slate-50/50">
               <button type="button" onClick={() => openFile(file)} className="flex items-center gap-2 min-w-0 text-left">
                 <Icons.File />
                 <span className="text-xs font-medium text-blue-600 hover:text-blue-700 truncate">{file.original_name}</span>
               </button>
-              <div className="flex items-center gap-2 shrink-0">
-                <button type="button" onClick={() => openFile(file)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-700">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button type="button" onClick={() => openFile(file)} className={`${buttonStyles.ghost} text-[#3F8CFF] hover:text-[#1f78ff]`}>
                   Открыть
                 </button>
-                <button type="button" onClick={() => download(file)} className="text-[10px] font-semibold text-slate-500 hover:text-slate-700">
+                <button type="button" onClick={() => download(file)} className={`${buttonStyles.ghost} text-slate-500 hover:text-slate-700`}>
                   Скачать
                 </button>
-                <button type="button" onClick={() => removeAttachment(file)} className="text-[10px] font-semibold text-slate-400 hover:text-rose-600">
+                <button type="button" onClick={() => removeAttachment(file)} className={`${buttonStyles.ghost} text-rose-500 hover:text-rose-700`}>
                   Удалить
                 </button>
               </div>
@@ -234,6 +203,10 @@ const BOMRow = ({
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [warehouseSearch, setWarehouseSearch] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [alternativeSearch, setAlternativeSearch] = useState("");
+  const [alternativeResults, setAlternativeResults] = useState([]);
+  const [alternativesLoading, setAlternativesLoading] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(item?.design_name || "");
@@ -242,8 +215,42 @@ const BOMRow = ({
   const [isSaving, setIsSaving] = useState(false);
   const bomDesignName = item?.design_name || item?.name || "Без названия";
 
+  if (!item) return null;
+
+  // Ищем данные узла в общем списке продуктов для глубокой проверки
+  const subProductData = (item.resource_type === "product" || item.resource_type === "subassembly") && productsList
+    ? productsList.find(p => p.id === item.resource_id)
+    : null;
+
+  const itemType = item.item_type || ((item.resource_type === "product" || item.resource_type === "subassembly") ? "assembly" : "component");
+  const isOperation = itemType === "operation";
+  const isSub = itemType === "assembly" || !!subProductData;
+  const directChildren = item.children || [];
+  const hasNestedContent = isSub && (
+    directChildren.length > 0 ||
+    subProductData?.sections?.some((section) => section.items?.length)
+  );
+  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== "all" || selectedCategory !== "all";
+  const shouldShowNestedContent = isExpanded || hasActiveFilters;
+
+  const hasWarehouseLink = isOperation || (item.resource_id !== null && item.resource !== null);
+  const warehouseName = isOperation ? (item.operation_role || "Работа / операция") : (item.resource?.name || "");
+  const warehousePartNumber = item.resource?.part_number || item.resource?.drawing_number || "";
+  const alternatives = Array.isArray(item.alternatives) ? item.alternatives : [];
+  const alternativesQty = alternatives.reduce((sum, alternative) => sum + Number(alternative.quantity || 0), 0);
+  const filteredProducts = availableProducts
+    .filter((product) => product.id !== item.product_id)
+    .filter((product) => {
+      const query = warehouseSearch.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        (product.name || "").toLowerCase().includes(query) ||
+        (product.drawing_number || "").toLowerCase().includes(query)
+      );
+    });
+
   useEffect(() => {
-    if (!showDropdown || matchCandidates.length > 0) return;
+    if (!showDropdown || isSub || matchCandidates.length > 0) return;
 
     const timer = setTimeout(async () => {
       try {
@@ -259,30 +266,40 @@ const BOMRow = ({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [showDropdown, warehouseSearch, matchCandidates.length, bomDesignName]);
+  }, [showDropdown, warehouseSearch, matchCandidates.length, bomDesignName, isSub]);
 
-  if (!item) return null;
+  useEffect(() => {
+    if (!isEditing || isOperation || isSub) return;
 
-  // Ищем данные узла в общем списке продуктов для глубокой проверки
-  const subProductData = (item.resource_type === "product" || item.resource_type === "subassembly") && productsList
-    ? productsList.find(p => p.id === item.resource_id)
-    : null;
+    const timer = setTimeout(async () => {
+      try {
+        setAlternativesLoading(true);
+        const params = new URLSearchParams({
+          q: alternativeSearch || bomDesignName,
+          limit: "20"
+        });
+        const res = await fetch(`/api/inventory/components/search?${params.toString()}`);
+        if (res.ok) setAlternativeResults(await res.json());
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setAlternativesLoading(false);
+      }
+    }, 250);
 
-  const itemType = item.item_type || ((item.resource_type === "product" || item.resource_type === "subassembly") ? "assembly" : "component");
-  const isOperation = itemType === "operation";
-  const isSub = itemType === "assembly" || !!subProductData;
-  const directChildren = item.children || [];
-
-  const hasWarehouseLink = isOperation || (item.resource_id !== null && item.resource !== null);
-  const warehouseName = isOperation ? (item.operation_role || "Работа / операция") : (item.resource?.name || "");
-  const warehousePartNumber = item.resource?.part_number || item.resource?.drawing_number || "";
+    return () => clearTimeout(timer);
+  }, [isEditing, alternativeSearch, bomDesignName, isOperation, isSub]);
 
   // --- ЛОГИКА ФИЛЬТРАЦИИ ---
   const matchesSearch =
     bomDesignName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (item.designators || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     warehouseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    warehousePartNumber.toLowerCase().includes(searchQuery.toLowerCase());
+    warehousePartNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    alternatives.some((alternative) =>
+      (alternative.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (alternative.part_number || "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   const matchesStatus =
     statusFilter === "all" ||
@@ -291,8 +308,7 @@ const BOMRow = ({
 
   const matchesCategory =
     selectedCategory === "all" ||
-    parentSectionName === selectedCategory ||
-    parentSectionName === "Дерево состава";
+    parentSectionName === selectedCategory;
 
   const currentItemMatches = matchesSearch && matchesStatus && matchesCategory;
 
@@ -314,7 +330,7 @@ const BOMRow = ({
   if (directChildren.length) {
     hasMatchingChildren = directChildren.some(treeNodeMatches);
   }
-  if (isSub && subProductData.sections) {
+  if (isSub && subProductData?.sections) {
     hasMatchingChildren = hasMatchingChildren || subProductData.sections.some(section =>
       section.items?.some(subItem => {
         const subType = subItem.item_type || ((subItem.resource_type === "product" || subItem.resource_type === "subassembly") ? "assembly" : "component");
@@ -340,20 +356,24 @@ const BOMRow = ({
     try {
       setMatchCandidates([]);
       setWarehouseSearch(bomDesignName);
-      const [resComponents, resProducts] = await Promise.all([
-        fetch(`/api/inventory/components/search?q=${encodeURIComponent(bomDesignName)}&limit=25`),
-        fetch("/api/production/products")
-      ]);
-      if (resComponents.ok && resProducts.ok) {
-        setAvailableComponents(await resComponents.json());
+      if (isSub) {
+        const resProducts = await fetch("/api/production/products");
+        if (!resProducts.ok) return;
         setAvailableProducts(await resProducts.json());
+        setAvailableComponents([]);
+        setShowDropdown(true);
+      } else {
+        const resComponents = await fetch(`/api/inventory/components/search?q=${encodeURIComponent(bomDesignName)}&limit=25`);
+        if (!resComponents.ok) return;
+        setAvailableComponents(await resComponents.json());
+        setAvailableProducts([]);
         setShowDropdown(true);
       }
     } catch (err) { console.error(err); }
   };
 
   const handleLoadCandidates = async () => {
-    if (isOperation) return;
+    if (isOperation || isSub) return;
     if (showDropdown) { setShowDropdown(false); return; }
     setCandidatesLoading(true);
     try {
@@ -402,6 +422,51 @@ const BOMRow = ({
     } catch (err) { console.error(err); }
   };
 
+  const handleAddAlternative = async (componentId, isPrimary = false) => {
+    try {
+      const res = await fetch(`/api/production/bom-items/${item.id}/alternatives`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ component_id: componentId, is_primary: isPrimary })
+      });
+      if (res.ok) {
+        setAlternativeSearch("");
+        if (onResolveSuccess) onResolveSuccess();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSetPrimaryAlternative = async (componentId) => {
+    try {
+      const res = await fetch(`/api/production/bom-items/${item.id}/alternatives/${componentId}/primary`, {
+        method: "PUT"
+      });
+      if (res.ok && onResolveSuccess) onResolveSuccess();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRemoveAlternative = async (componentId) => {
+    if (!window.confirm("Удалить этот аналог из разрешенных замен?")) return;
+    try {
+      const res = await fetch(`/api/production/bom-items/${item.id}/alternatives/${componentId}`, {
+        method: "DELETE"
+      });
+      if (res.ok && onResolveSuccess) onResolveSuccess();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRowClick = (event) => {
+    if (!hasNestedContent) return;
+    if (event.target.closest("button, input, select, textarea, a, label")) return;
+    setIsExpanded((value) => !value);
+  };
+
   const handleDelete = async () => {
     if (!window.confirm(`Удалить позицию "${bomDesignName}"?`)) return;
     setIsDeleting(true);
@@ -436,63 +501,210 @@ const BOMRow = ({
     } catch (err) { console.error(err); } finally { setIsSaving(false); }
   };
 
-  if (isEditing) {
-    return (
-      <form onSubmit={handleSaveEdit} className="bg-slate-50 p-4 rounded-xl border border-blue-500 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end w-full" style={{ paddingLeft: `16px`, marginLeft: `${level * 20}px` }}>
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Наименование</label>
-            <input type="text" required value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full p-2 text-xs border rounded-lg bg-white text-slate-800 font-medium" />
+  const editPanel = isEditing && (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-label="Закрыть редактирование позиции"
+        className="hidden flex-1 cursor-default md:block"
+        onClick={() => setIsEditing(false)}
+      />
+      <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+        <form onSubmit={handleSaveEdit} className="flex h-full flex-col bg-white">
+          <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-slate-400">Состав изделия</p>
+              <h3 className="mt-1 text-xl font-black text-slate-900 break-words">Редактирование позиции</h3>
+              <p className="mt-2 text-sm text-slate-500">{bomDesignName}</p>
+            </div>
+            <button type="button" onClick={() => setIsEditing(false)} className={`${buttonStyles.neutral} shrink-0 h-10 px-4`}>
+              Закрыть
+            </button>
           </div>
-          <div>
-            <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Поз. обозначение</label>
-            <input type="text" value={editDesignators} onChange={(e) => setEditDesignators(e.target.value)} className="w-full p-2 text-xs border rounded-lg bg-white font-mono text-slate-700" />
+
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+            <div className="flex flex-col gap-5">
+              <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                <label className="block text-[11px] font-bold text-slate-500 mb-2">Наименование *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_180px]">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Позиционные обозначения</label>
+                  <input
+                    type="text"
+                    value={editDesignators}
+                    onChange={(e) => setEditDesignators(e.target.value)}
+                    className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10 font-mono"
+                    placeholder="Например: R1, R2, R3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Количество *</label>
+                  <input
+                    type="number"
+                    min="0.001"
+                    step="0.001"
+                    required
+                    value={editQty}
+                    onChange={(e) => setEditQty(e.target.value)}
+                    className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </div>
+              </div>
+
+              {!isOperation && !isSub && (
+                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900">Аналоги</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {alternatives.length
+                          ? `${alternatives.length} разрешено, всего на складе ${alternativesQty} шт.`
+                          : "Разрешенные замены не указаны"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {alternatives.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {alternatives.map((alternative) => (
+                        <div key={alternative.component_id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-semibold text-slate-800">{alternative.name}</p>
+                              {alternative.is_primary && (
+                                <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                                  Основной
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 truncate text-xs font-mono text-slate-400">
+                              {alternative.part_number || "Без артикула"} · остаток {alternative.quantity || 0} шт.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {!alternative.is_primary && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimaryAlternative(alternative.component_id)}
+                                className={`${buttonStyles.neutral} h-8 px-3`}
+                              >
+                                Основной
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAlternative(alternative.component_id)}
+                              className={`${buttonStyles.danger} h-8 px-3`}
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-3">
+                    <label className="block text-[11px] font-bold text-slate-500 mb-2">Добавить аналог со склада</label>
+                    <input
+                      type="text"
+                      value={alternativeSearch}
+                      onChange={(e) => setAlternativeSearch(e.target.value)}
+                      placeholder="Поиск по названию, артикулу или свойствам"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                    />
+                    <div className="mt-2 max-h-56 overflow-y-auto">
+                      {alternativesLoading ? (
+                        <div className="px-2 py-3 text-xs text-slate-400">Поиск...</div>
+                      ) : (
+                        alternativeResults
+                          .filter((component) => !alternatives.some((alternative) => alternative.component_id === component.id))
+                          .map((component) => (
+                            <button
+                              key={component.id}
+                              type="button"
+                              onClick={() => handleAddAlternative(component.id, alternatives.length === 0)}
+                              className="w-full rounded-xl p-3 text-left transition-colors hover:bg-slate-50"
+                            >
+                              <span className="block text-sm font-semibold text-slate-800">{component.name}</span>
+                              <span className="mt-1 block text-xs font-mono text-slate-400">
+                                {component.part_number || "Без артикула"} · остаток {component.quantity || 0} шт.
+                              </span>
+                            </button>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Количество</label>
-            <input type="number" min="1" required value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-full p-2 text-xs border rounded-lg bg-white font-semibold text-slate-800" />
+
+          <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+            <button type="submit" disabled={isSaving} className={`${buttonStyles.primary} w-full h-11 px-5`}>
+              {isSaving ? "Сохранение..." : "Сохранить"}
+            </button>
           </div>
-        </div>
-        <div className="flex gap-2 justify-end">
-          <button type="button" onClick={() => setIsEditing(false)} className="px-3 py-2 text-xs font-semibold text-slate-500 border rounded-lg hover:bg-slate-100 transition-colors">Отмена</button>
-          <button type="submit" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-semibold text-xs rounded-lg hover:bg-blue-700 transition-colors">Сохранить</button>
-        </div>
-      </form>
-    );
-  }
+        </form>
+      </div>
+    </div>
+  );
 
   return (
-    <div className={`flex flex-col gap-1.5 relative w-full ${isDeleting ? "opacity-30 pointer-events-none" : ""} ${!currentItemMatches ? "opacity-40" : ""}`}>
+    <div className={`flex flex-col gap-1.5 relative w-full ${isDeleting ? "opacity-30 pointer-events-none" : ""}`}>
         <div
-          className={`bg-white p-3 sm:p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all ${
+          onClick={handleRowClick}
+	          className={`bg-white p-4 rounded-2xl border flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 transition-all hover:shadow-sm ${
           isSub
-            ? "border-l-4 border-l-indigo-500 bg-indigo-50/5 border-slate-200 shadow-xs" 
+            ? `border-l-4 border-l-indigo-500 bg-indigo-50/5 border-slate-200 shadow-xs ${hasNestedContent ? "cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/20" : ""}` 
             : isOperation
             ? "border-l-4 border-l-amber-500 bg-amber-50/10 border-slate-200 shadow-xs"
             : "border-slate-200 hover:border-slate-300 shadow-xs"
         }`}
-        style={{ marginLeft: `${level * 20}px` }}
+        style={{ marginLeft: `${level * 18}px` }}
       >
         <div className="flex items-start sm:items-center gap-3 flex-1 w-full min-w-0">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
             isSub ? "bg-indigo-50 border-indigo-100" : isOperation ? "bg-amber-50 border-amber-100 text-amber-600" : hasWarehouseLink ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-100"
           }`}>
             {isSub ? <Icons.Puzzle className="w-4 h-4 text-indigo-600" /> : isOperation ? <Icons.Settings /> : hasWarehouseLink ? <Icons.Check /> : <Icons.Alert />}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 w-full min-w-0">
+	          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 xl:gap-4 w-full min-w-0">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <p className="font-semibold text-slate-900 text-xs truncate">{bomDesignName}</p>
+	                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                    className="min-w-0 truncate text-left text-sm font-bold text-slate-900 transition-colors hover:text-[#3F8CFF]"
+                    title="Редактировать позицию"
+                  >
+                    {bomDesignName}
+                  </button>
+                {hasNestedContent && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">
+                    {shouldShowNestedContent ? <Icons.ChevronDown className="w-3 h-3" /> : <Icons.ChevronRight />}
+                    {shouldShowNestedContent ? "Раскрыто" : "Свернуто"}
+                  </span>
+                )}
                 {parentSectionName && selectedCategory === "all" && (
-                  <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider shrink-0">{parentSectionName}</span>
+	                  <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-1 rounded-full font-bold uppercase tracking-wider shrink-0">{parentSectionName}</span>
                 )}
               </div>
               <p className="text-[10px] text-slate-400 font-mono mt-0.5">Поз: {item.designators || "—"}</p>
             </div>
 
             {/* ИЗМЕНЕННЫЙ БЛОК: Единый контейнер управления связью */}
-            <div className="flex flex-col justify-center md:border-l md:border-slate-100 md:pl-4 min-w-0">
+	            <div className="flex flex-col justify-center xl:border-l xl:border-slate-100 xl:pl-4 min-w-0">
               <div className="relative inline-block w-full">
                 {hasWarehouseLink ? (
                   <div className="flex justify-between items-center w-full min-w-0 gap-2">
@@ -505,89 +717,104 @@ const BOMRow = ({
                       {/* Опции изменения и сброса для уже привязанного элемента */}
                       {!isOperation && (
                         <div className="flex gap-2.5 mt-1">
-                        <button type="button" onClick={handleOpenDropdown} className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline">Изменить</button>
-                        <button type="button" onClick={() => handleAssignResource(null, "raw_string")} className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold underline">Отвязать</button>
+	                        <button type="button" onClick={handleOpenDropdown} className={`${buttonStyles.ghost} text-[#3F8CFF] hover:text-[#1f78ff]`}>Изменить</button>
+	                        <button type="button" onClick={() => handleAssignResource(null, "raw_string")} className={`${buttonStyles.ghost} text-slate-400 hover:text-rose-600`}>Отвязать</button>
                         </div>
                       )}
                     </div>
                     {isSub && (
-                      <button
-                        onClick={() => onDrillDown(item.resource_id)}
-                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[9px] font-bold uppercase tracking-wider px-2 py-1.5 rounded-md transition-colors shrink-0 border border-indigo-100"
-                      >
-                        <Icons.Settings />
-                      </button>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onDrillDown(item.resource_id)}
+                          className={`${buttonStyles.neutral} h-8 px-2.5`}
+                        >
+                          <Icons.Settings />
+                          <span>Открыть</span>
+                        </button>
+                      </div>
                     )}
                   </div>
 	                ) : (
 	                  <div className="flex flex-wrap items-center gap-2">
-	                    <span className="text-[10px] font-medium text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded">Не привязано</span>
-	                    <button type="button" onClick={handleLoadCandidates} disabled={candidatesLoading} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold underline disabled:text-slate-400">
-	                      {candidatesLoading ? "Подбор..." : "Подобрать"}
-	                    </button>
-	                    <button type="button" onClick={handleOpenDropdown} className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline">Вручную</button>
+		                    <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-1 rounded-full">Не привязано</span>
+                    {!isSub && (
+		                      <button type="button" onClick={handleLoadCandidates} disabled={candidatesLoading} className={`${buttonStyles.ghost} text-emerald-600 hover:text-emerald-800 disabled:text-slate-400`}>
+	                        {candidatesLoading ? "Подбор..." : "Подобрать"}
+	                      </button>
+                    )}
+			                    <button type="button" onClick={handleOpenDropdown} className={`${buttonStyles.ghost} text-[#3F8CFF] hover:text-[#1f78ff]`}>Вручную</button>
 	                  </div>
 	                )}
 
                 {/* Универсальный выпадающий список выбора (работает и на привязку, и на переопределение) */}
                 {showDropdown && (
-                  <div className="absolute left-0 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto p-1">
-                    <div className="flex justify-between items-center px-2 py-1 bg-slate-50 border-b border-slate-100 mb-1">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Выберите позицию</span>
-                      <button type="button" onClick={() => setShowDropdown(false)} className="text-slate-400 hover:text-slate-600"><Icons.Close className="w-3 h-3" /></button>
+                  <div className="absolute left-0 right-0 lg:right-auto mt-2 w-full lg:w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl z-50">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                      <span className="text-xs font-bold text-slate-500">Выберите позицию</span>
+                      <button type="button" onClick={() => setShowDropdown(false)} className={buttonStyles.iconNeutral}>
+                        <Icons.Close className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+                    <div className="max-h-72 overflow-y-auto p-2">
 	                    {matchCandidates.length > 0 && (
 	                      <>
-	                        <div className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded uppercase my-1">Умный подбор:</div>
+	                        <div className="px-2 py-1.5 text-xs font-bold text-emerald-600">Умный подбор</div>
 	                        {matchCandidates.map(comp => (
-	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full text-left p-2 rounded-md hover:bg-emerald-50 flex flex-col">
-	                            <span className="text-xs font-medium text-slate-800">{comp.name}</span>
-	                            <span className="text-[9px] font-mono text-slate-400">
+	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full rounded-xl p-3 text-left transition-colors hover:bg-emerald-50">
+	                            <span className="block text-sm font-semibold text-slate-800">{comp.name}</span>
+	                            <span className="mt-1 block text-xs font-mono text-slate-400">
 	                              {comp.part_number || "Без артикула"} · {Math.round((comp.score || 0) * 100)}% · {comp.reason}
 	                            </span>
 	                          </button>
 	                        ))}
 	                      </>
 	                    )}
-	                    {matchCandidates.length === 0 && availableProducts.length === 0 && availableComponents.length === 0 && (
-	                      <div className="text-[10px] text-slate-400 px-2 py-3">Кандидаты не найдены.</div>
-	                    )}
-	                    {availableProducts.length > 0 && (
-	                      <>
-	                        <div className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded uppercase my-1">Сборочные единицы (Узлы):</div>
-	                        {availableProducts.filter(p => p.id !== item.product_id).map(prod => (
-	                          <button key={prod.id} type="button" onClick={() => handleAssignResource(prod.id, "product")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
-	                            <span className="text-xs font-medium text-slate-800">{prod.name}</span>
-	                            {prod.drawing_number && <span className="text-[9px] font-mono text-slate-400">{prod.drawing_number}</span>}
+		                    {matchCandidates.length === 0 && (isSub ? filteredProducts.length === 0 : availableComponents.length === 0) && (
+		                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-400">Кандидаты не найдены.</div>
+		                    )}
+		                    {isSub && filteredProducts.length > 0 && (
+		                      <>
+		                        <div className="px-2 py-1.5 text-xs font-bold text-indigo-600">Сборочные единицы</div>
+		                        {filteredProducts.map(prod => (
+		                          <button key={prod.id} type="button" onClick={() => handleAssignResource(prod.id, "product")} className="w-full rounded-xl p-3 text-left transition-colors hover:bg-slate-50">
+		                            <span className="block text-sm font-semibold text-slate-800">{prod.name}</span>
+		                            {prod.drawing_number && <span className="mt-1 block text-xs font-mono text-slate-400">{prod.drawing_number}</span>}
 	                          </button>
 	                        ))}
 	                      </>
 	                    )}
 	                    {matchCandidates.length === 0 && (
-	                      <div className="px-1 py-1">
+	                      <div className="py-2">
 	                        <input
 	                          type="text"
-	                          value={warehouseSearch}
-	                          onChange={(e) => setWarehouseSearch(e.target.value)}
-	                          placeholder="Поиск по складу..."
-	                          className="w-full p-2 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-400"
-	                        />
-	                      </div>
-	                    )}
-	                    {availableComponents.length > 0 && (
-	                      <>
-	                        <div className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded uppercase my-1 mt-2">Складские компоненты:</div>
+		                          value={warehouseSearch}
+		                          onChange={(e) => setWarehouseSearch(e.target.value)}
+		                          placeholder={isSub ? "Поиск сборочной единицы..." : "Поиск по складу..."}
+		                          className="w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+		                        />
+		                      </div>
+		                    )}
+		                    {!isSub && availableComponents.length > 0 && (
+		                      <>
+	                        <div className="px-2 py-1.5 text-xs font-bold text-emerald-600">Складские компоненты</div>
 	                        {availableComponents.map(comp => (
-	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full text-left p-2 rounded-md hover:bg-slate-50 flex flex-col">
-	                            <span className="text-xs font-medium text-slate-800">{comp.name}</span>
-	                            {comp.part_number && <span className="text-[9px] font-mono text-slate-400">{comp.part_number}</span>}
+	                          <button key={comp.id} type="button" onClick={() => handleAssignResource(comp.id, "component")} className="w-full rounded-xl p-3 text-left transition-colors hover:bg-slate-50">
+	                            <span className="block text-sm font-semibold text-slate-800">{comp.name}</span>
+	                            {comp.part_number && <span className="mt-1 block text-xs font-mono text-slate-400">{comp.part_number}</span>}
 	                          </button>
 	                        ))}
 	                      </>
 	                    )}
+                    </div>
 	                  </div>
 	                )}
               </div>
+              {!isOperation && !isSub && alternatives.length > 0 && (
+                <p className="mt-2 text-[11px] font-semibold text-slate-400">
+                  Аналоги: {alternatives.length} · склад {alternativesQty} шт.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -597,17 +824,14 @@ const BOMRow = ({
             <p className="font-semibold text-slate-800 text-xs">{item.quantity || 0} шт.</p>
           </div>
           <div className="flex gap-1.5">
-            <button onClick={() => setIsEditing(true)} className="p-1.5 rounded-md bg-slate-50 text-slate-500 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition-colors" title="Редактировать">
-              <Icons.Edit />
-            </button>
-            <button onClick={handleDelete} className="p-1.5 rounded-md bg-slate-50 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-colors" title="Удалить">
+		            <button onClick={handleDelete} className={buttonStyles.iconDanger} title="Удалить">
               <Icons.Close className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
 
-      {directChildren.length > 0 && (
+      {shouldShowNestedContent && directChildren.length > 0 && (
         <div className="flex flex-col gap-1.5 mt-1 border-l-2 border-dashed border-slate-200 ml-3 pl-3 w-full">
           {directChildren.map((child) => (
             <BOMRow
@@ -626,7 +850,7 @@ const BOMRow = ({
         </div>
       )}
 
-      {isSub && subProductData.sections && (
+      {shouldShowNestedContent && isSub && subProductData?.sections && (
         <div className="flex flex-col gap-4 mt-1 border-l-2 border-dashed border-indigo-200 ml-3 pl-3 w-full">
           {subProductData.sections
             .filter(section => selectedCategory === "all" || section.name === selectedCategory)
@@ -674,6 +898,7 @@ const BOMRow = ({
             })}
         </div>
       )}
+      {editPanel}
     </div>
   );
 };
@@ -756,9 +981,6 @@ export default function GadgetsBase() {
   // СБОР ВСЕХ ДИНАМИЧЕСКИХ КАТЕГОРИЙ
   const availableCategoriesInProduct = ["all"];
   if (viewingProduct) {
-    if (viewingProduct.tree?.length) {
-      availableCategoriesInProduct.push("Дерево состава");
-    }
     viewingProduct.sections?.forEach(sec => {
       if (sec.name && !availableCategoriesInProduct.includes(sec.name)) {
         availableCategoriesInProduct.push(sec.name);
@@ -778,138 +1000,223 @@ export default function GadgetsBase() {
     });
   }
 
-  // ПРАВИЛЬНЫЙ ПРОБРОС ФЛАГА ДЛЯ ПОДДЕРЖКИ БЭКЕНДА
-  if (showProductForm) {
-    return (
-      <ProductForm
-        initialData={activeTab === "sub" ? { is_final: false } : null}
-        onBack={() => { setShowProductForm(false); fetchProducts(); }}
-      />
-    );
-  }
+  const closeProductPanel = () => {
+    setShowProductForm(false);
+    setIsEditingProduct(false);
+  };
 
-  if (isEditingProduct) return <ProductForm initialData={viewingProduct} onBack={() => { setIsEditingProduct(false); fetchProducts(); }} />;
+  const productPanel = (showProductForm || isEditingProduct) && (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-label="Закрыть форму изделия"
+        className="hidden flex-1 cursor-default md:block"
+        onClick={closeProductPanel}
+      />
+      <div className="h-full w-full max-w-3xl overflow-y-auto bg-white shadow-2xl">
+        <ProductForm
+          panel
+          initialData={isEditingProduct ? viewingProduct : activeTab === "sub" ? { is_final: false } : null}
+          onBack={() => { closeProductPanel(); fetchProducts(); }}
+        />
+      </div>
+    </div>
+  );
+
+  const bomPanel = showBOMForm && viewingProduct && (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-label="Закрыть добавление позиции"
+        className="hidden flex-1 cursor-default md:block"
+        onClick={() => setShowBOMForm(false)}
+      />
+      <div className="h-full w-full max-w-3xl overflow-y-auto bg-white shadow-2xl">
+        <BOMItemForm
+          panel
+          productId={viewingProduct.id}
+          productTree={viewingProduct.tree || []}
+          onBack={() => setShowBOMForm(false)}
+          onSuccess={fetchProducts}
+        />
+      </div>
+    </div>
+  );
 
   // --- ЭКРАН СОСТАВА ИЗДЕЛИЯ ---
   if (viewingProduct) {
+    const bomRootsCount = viewingProduct.tree?.length || viewingProduct.sections?.reduce((sum, section) => sum + (section.items?.length || 0), 0) || 0;
+    const totalBomRows = viewingProduct.tree?.length
+      ? (() => {
+          const countRows = (items = []) => items.reduce((sum, item) => sum + 1 + countRows(item.children || []), 0);
+          return countRows(viewingProduct.tree);
+        })()
+      : bomRootsCount;
+    const bomRows = viewingProduct.tree?.length
+      ? (() => {
+          const collectRows = (items = []) => items.flatMap((item) => [item, ...collectRows(item.children || [])]);
+          return collectRows(viewingProduct.tree);
+        })()
+      : viewingProduct.sections?.flatMap((section) => section.items || []) || [];
+    const linkedRowsCount = bomRows.filter((item) => item.is_resolved || item.resource_id || item.resource_type === "operation").length;
+    const attentionRowsCount = Math.max(totalBomRows - linkedRowsCount, 0);
+
     return (
       <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full font-sans antialiased text-slate-800">
-        {/* Хлебные крошки и Шапка */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-200 pb-5">
-          <div>
-            <button onClick={handleGoBackInTree} className="text-blue-600 hover:text-blue-700 font-bold text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1 transition-colors">
-              <span>&larr;</span>
-              <span>{historyStack.length > 0 ? "Уровень выше" : "К списку изделий"}</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="text-slate-400">
-                {viewingProduct.is_subassembly ? <Icons.Puzzle className="w-6 h-6 text-indigo-500" /> : <Icons.Box className="w-6 h-6 text-blue-500" />}
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-                {viewingProduct.name}
-              </h2>
-            </div>
-            {viewingProduct.drawing_number && (
-              <p className="text-xs text-slate-400 font-mono mt-0.5">Обозначение: {viewingProduct.drawing_number} (v{viewingProduct.revision || "1.0"})</p>
-            )}
-          </div>
+        <div className="mb-6">
+          <button onClick={handleGoBackInTree} className="text-blue-600 hover:text-blue-700 font-bold text-xs uppercase tracking-wider mb-4 flex items-center gap-1 transition-colors">
+            <span>&larr;</span>
+            <span>{historyStack.length > 0 ? "Уровень выше" : "К списку изделий"}</span>
+          </button>
 
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            <button onClick={() => handleSmartResolve(viewingProduct.id)} className="flex-1 md:flex-none px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs uppercase tracking-wider rounded-lg shadow-xs transition-colors">Автоподбор</button>
-            <button onClick={() => setIsEditingProduct(true)} className="flex-1 md:flex-none px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs uppercase tracking-wider rounded-lg border border-slate-200 transition-colors">Паспорт</button>
-            <button onClick={() => setShowBOMForm(true)} className="flex-1 md:flex-none px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs uppercase tracking-wider rounded-lg shadow-xs transition-colors">+ Позиция</button>
+          <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6">
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                      viewingProduct.is_subassembly
+                        ? "border-indigo-100 bg-indigo-50 text-indigo-700"
+                        : "border-blue-100 bg-blue-50 text-blue-700"
+                    }`}>
+                      {viewingProduct.is_subassembly ? "Сборочная единица" : "Готовое изделие"}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 break-words">
+                    {viewingProduct.name}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingProduct(true)}
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md active:translate-y-0 sm:w-auto"
+                  title="Редактировать паспорт"
+                >
+                  <Icons.Edit />
+                  <span>Редактировать</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[11px] font-bold text-slate-400">Децимальный №</p>
+                  <p className="mt-1 truncate font-mono text-sm font-semibold text-slate-800">{viewingProduct.drawing_number || "не указан"}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[11px] font-bold text-slate-400">Ревизия</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{viewingProduct.revision || "1.0"}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <p className="text-[11px] font-bold text-slate-400">Строк состава</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{totalBomRows}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <ProductFilesPanel product={viewingProduct} onChanged={fetchProducts} />
 
-        {/* Строгая фильтр-панель */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
-            {/* Живой поиск */}
-            <div className="relative w-full">
-              <span className="absolute left-3 top-3"><Icons.Search /></span>
-              <input
-                type="text"
-                placeholder="Поиск детали, позиции..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white p-2 pl-9 pr-8 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
-                  <Icons.Close className="w-3.5 h-3.5" />
+        <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-xl font-black text-slate-900">Состав изделия</h3>
+                <p className="text-sm text-slate-500 mt-2 max-w-2xl">
+                  Позиции, сборочные единицы и работы, которые входят в изделие.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full lg:w-auto">
+                <button onClick={() => handleSmartResolve(viewingProduct.id)} className={`${buttonStyles.success} h-10 px-4`}>Автоподбор</button>
+                <button onClick={() => setShowBOMForm(true)} className={`${buttonStyles.primary} h-10 px-4`}>Добавить позицию</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <p className="text-[11px] font-bold text-slate-400">Всего позиций</p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">{totalBomRows}</p>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                <p className="text-[11px] font-bold text-emerald-600">Привязано</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-700">{linkedRowsCount}</p>
+              </div>
+              <div className="rounded-2xl border border-rose-100 bg-rose-50/60 px-4 py-3">
+                <p className="text-[11px] font-bold text-rose-500">Требует внимания</p>
+                <p className="mt-1 text-sm font-semibold text-rose-600">{attentionRowsCount}</p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
+                <div className="relative w-full">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2"><Icons.Search /></span>
+                  <input
+                    type="text"
+                    placeholder="Поиск по составу"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <Icons.Close className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="relative w-full md:col-span-2">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full min-h-11 appearance-none rounded-2xl border border-slate-200 bg-white px-3.5 py-3 pr-10 text-sm font-semibold text-slate-700 outline-none transition-all focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                  >
+                    {availableCategoriesInProduct.map(catName => (
+                      <option key={catName} value={catName}>
+                        {catName === "all" ? "Все разделы состава" : catName}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Icons.ChevronDown />
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-3">
+                <button
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 ${
+                    statusFilter === "all" ? "bg-[#3F8CFF] border-[#3F8CFF] text-white" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Все
                 </button>
-              )}
+                <button
+                  onClick={() => setStatusFilter("resolved")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 ${
+                    statusFilter === "resolved" ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Привязаны
+                </button>
+                <button
+                  onClick={() => statusFilter === "unresolved" ? setStatusFilter("all") : setStatusFilter("unresolved")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 ${
+                    statusFilter === "unresolved" ? "bg-rose-50 border-rose-500 text-rose-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Требуют внимания
+                </button>
+              </div>
             </div>
-
-            {/* Выпадающий список категорий */}
-            <div className="w-full md:col-span-2">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full bg-white p-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500"
-              >
-                {availableCategoriesInProduct.map(catName => (
-                  <option key={catName} value={catName}>
-                    {catName === "all" ? "Все категории спецификации" : `Раздел: ${catName}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Переключатели состояний */}
-          <div className="border-t border-slate-200 pt-3 flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-2">Состояние записей:</span>
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                statusFilter === "all" ? "bg-slate-900 border-slate-900 text-white" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              Все
-            </button>
-            <button
-              onClick={() => setStatusFilter("resolved")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                statusFilter === "resolved" ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              Привязаны
-            </button>
-            <button
-              onClick={() => statusFilter === "unresolved" ? setStatusFilter("all") : setStatusFilter("unresolved")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                statusFilter === "unresolved" ? "bg-rose-50 border-rose-500 text-rose-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              Требуют внимания
-            </button>
           </div>
         </div>
-
-        {showBOMForm && (
-          <div className="mb-6">
-            <BOMItemForm
-              productId={viewingProduct.id}
-              productTree={viewingProduct.tree || []}
-              onBack={() => setShowBOMForm(false)}
-              onSuccess={fetchProducts}
-            />
-          </div>
-        )}
 
         {/* Вывод дерева спецификации */}
         <div className="flex flex-col gap-6 w-full">
           {viewingProduct.tree && viewingProduct.tree.length > 0 ? (
             <div className="flex flex-col gap-2 w-full">
-              {selectedCategory === "all" && (
-                <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-100 pb-1 flex items-center gap-1.5">
-                  <Icons.ChevronRight />
-                  <span>Дерево состава</span>
-                </div>
-              )}
               <div className="flex flex-col gap-2 w-full">
                 {viewingProduct.tree.map((item) => (
                   <BOMRow
@@ -921,7 +1228,7 @@ export default function GadgetsBase() {
                     searchQuery={searchQuery}
                     statusFilter={statusFilter}
                     selectedCategory={selectedCategory}
-                    parentSectionName="Дерево состава"
+                    parentSectionName=""
                   />
                 ))}
               </div>
@@ -938,7 +1245,7 @@ export default function GadgetsBase() {
                 return (
                   <div key={section.name} className="flex flex-col gap-2 w-full">
                     {isHeaderVisible && (
-                      <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-100 pb-1 flex items-center gap-1.5">
+                      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm flex items-center gap-2">
                         <Icons.ChevronRight />
                         <span>{section.name}</span>
                       </div>
@@ -962,11 +1269,13 @@ export default function GadgetsBase() {
                 );
               })
           ) : (
-            <div className="text-center py-12 border border-dashed border-slate-200 rounded-xl bg-slate-50 text-slate-400 font-medium text-sm">
-              Спецификация изделия пуста.
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-12 text-center text-sm font-medium text-slate-400">
+              Состав изделия пока пуст.
             </div>
           )}
         </div>
+        {productPanel}
+        {bomPanel}
       </div>
     );
   }
@@ -976,65 +1285,85 @@ export default function GadgetsBase() {
   // --- ГЛАВНЫЙ ЭКРАН МОДУЛЯ (БАЗА ИЗДЕЛИЙ) ---
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full font-sans antialiased text-slate-800">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">База изделий</h1>
-          <p className="text-xs text-slate-400 mt-1">Реестр спецификаций, узлов и приборов производства</p>
+      <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Каталог производства</p>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">База изделий</h1>
+            <p className="text-sm text-slate-500 mt-2 max-w-2xl">Карточки устройств и сборочных единиц с составом, работами, документами и связью со складом.</p>
+          </div>
+	          <button
+	            onClick={() => setShowProductForm(true)}
+	            className={`${buttonStyles.primary} w-full sm:w-auto h-10 px-5`}
+	          >
+            {activeTab === "sub" ? "Новая сборочная единица" : "Новое изделие"}
+          </button>
         </div>
-        <button
-          onClick={() => setShowProductForm(true)}
-          className={`w-full sm:w-auto text-white px-5 py-2.5 rounded-lg font-semibold text-xs uppercase tracking-wider shadow-xs transition-colors ${
-            activeTab === "sub" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-blue-600 hover:bg-blue-700"
-          }`}
-        >
-          {activeTab === "sub" ? "+ Новая сборочная единица" : "+ Новое изделие"}
-        </button>
-      </div>
 
-      {/* Переключатели вкладок */}
-      <div className="flex gap-4 mb-6 border-b border-slate-200 pb-px">
-        <button onClick={() => setActiveTab("main")} className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${activeTab === "main" ? "border-blue-600 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
-          <Icons.Box className="w-4 h-4" />
-          <span>Изделие ({mainDevices.length})</span>
-        </button>
-        <button onClick={() => setActiveTab("sub")} className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${activeTab === "sub" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
-          <Icons.Puzzle className="w-4 h-4" />
-          <span>Сборочные единицы ({subAssemblies.length})</span>
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+          <button
+            onClick={() => setActiveTab("main")}
+	            className={`text-left rounded-2xl border p-4 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 ${
+              activeTab === "main" ? "bg-blue-50 border-blue-100 text-blue-700 shadow-sm" : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Icons.Box className="w-5 h-5" />
+              <span className="text-sm font-black">Готовые устройства</span>
+            </div>
+            <p className="text-xs mt-2 opacity-75">{mainDevices.length} карточек для запуска в производство</p>
+          </button>
+          <button
+            onClick={() => setActiveTab("sub")}
+	            className={`text-left rounded-2xl border p-4 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 ${
+              activeTab === "sub" ? "bg-indigo-50 border-indigo-100 text-indigo-700 shadow-sm" : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Icons.Puzzle className="w-5 h-5" />
+              <span className="text-sm font-black">Сборочные единицы</span>
+            </div>
+            <p className="text-xs mt-2 opacity-75">{subAssemblies.length} узлов, плат и полуфабрикатов</p>
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="py-16 text-center text-sm font-medium text-slate-400">Загрузка данных...</div>
       ) : (
         /* Адаптивная Grid-сетка карточек */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
           {visibleProducts.map((product) => (
             <div
               key={product.id}
               onClick={() => { setViewingProduct(product); setHistoryStack([]); }}
-              className="bg-white p-5 rounded-xl border border-slate-200 flex flex-col justify-between hover:border-slate-300 hover:shadow-sm transition-all relative cursor-pointer group min-w-0"
+              className="bg-white p-5 rounded-3xl border border-slate-100 flex flex-col justify-between hover:border-blue-100 hover:shadow-sm transition-all relative cursor-pointer group min-w-0 overflow-hidden"
             >
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteProductFromBase(product.id, product.name, e); }}
-                className="absolute top-4 right-4 p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100"
+	                className={`${buttonStyles.iconDanger} absolute top-4 right-4`}
                 title="Удалить из базы"
               >
                 <Icons.Close className="w-4 h-4" />
               </button>
 
               <div className="min-w-0 pr-6">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center border mb-3 ${product.is_subassembly ? "bg-indigo-50 border-indigo-100 text-indigo-600" : "bg-blue-50 border-blue-100 text-blue-600"}`}>
-                  {product.is_subassembly ? <Icons.Puzzle className="w-4 h-4" /> : <Icons.Box className="w-4 h-4" />}
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border mb-4 ${product.is_subassembly ? "bg-indigo-50 border-indigo-100 text-indigo-600" : "bg-blue-50 border-blue-100 text-blue-600"}`}>
+                  {product.is_subassembly ? <Icons.Puzzle className="w-6 h-6" /> : <Icons.Box className="w-6 h-6" />}
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase truncate mb-1 group-hover:text-blue-600 transition-colors">{product.name}</h3>
-                {product.drawing_number && (
-                  <p className="text-[11px] font-mono text-slate-400 truncate">Чертеж: {product.drawing_number}</p>
-                )}
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                  {product.is_subassembly ? "Сборочная единица" : "Готовое изделие"}
+                </p>
+                <h3 className="text-base font-black text-slate-900 truncate mb-2 group-hover:text-blue-600 transition-colors">{product.name}</h3>
+                <div className="space-y-1 text-[11px] text-slate-400">
+                  <p className="font-mono truncate">Децимальный №: {product.drawing_number || "не указан"}</p>
+                  <p>Ревизия: {product.revision || "1.0"}</p>
+                </div>
               </div>
 
-              <div className="border-t border-slate-100 mt-4 pt-3 flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-slate-500 transition-colors">
-                <span>Групп в составе: {product.sections?.length || 0}</span>
-                <span className="text-blue-600 group-hover:translate-x-0.5 transition-transform">Открыть состав &rarr;</span>
+              <div className="border-t border-slate-100 mt-5 pt-4 flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-400 group-hover:text-slate-500 transition-colors">
+                <span>{product.tree?.length || 0} корневых позиций</span>
+                <span className="text-blue-600 group-hover:translate-x-0.5 transition-transform">Открыть</span>
               </div>
             </div>
           ))}
@@ -1045,6 +1374,7 @@ export default function GadgetsBase() {
           )}
         </div>
       )}
+      {productPanel}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import InventoryForm from "./InventoryForm";
 
 // Иконки
@@ -6,19 +6,35 @@ const Icons = {
   Plus: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>,
   Edit: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
   Trash: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
-  Incoming: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+  Incoming: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+  Search: () => <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+  Close: () => <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
+  ChevronDown: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>,
+  Box: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+};
+
+const buttonBase = "inline-flex items-center justify-center gap-2 rounded-xl text-[12px] font-semibold border transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0";
+const buttonStyles = {
+  primary: `${buttonBase} bg-[#3F8CFF] hover:bg-[#1f78ff] text-white border-[#3F8CFF] shadow-sm hover:shadow-md`,
+  danger: `${buttonBase} bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-100 hover:border-rose-200`,
+  neutral: `${buttonBase} bg-white hover:bg-slate-50 text-slate-600 border-slate-200`,
+  iconNeutral: "inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-50 text-slate-500 hover:text-[#3F8CFF] border border-slate-200 hover:border-blue-200 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0",
+  iconDanger: "inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-50 text-rose-500 hover:text-rose-700 border border-rose-100 hover:border-rose-200 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0",
 };
 
 export default function InventoryBase({ user }) {
   const [components, setComponents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("Все");
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingComponent, setEditingComponent] = useState(null);
+  const [selectedComponent, setSelectedComponent] = useState(null);
   const [incomingCompId, setIncomingCompId] = useState(null);
   const [incomingQty, setIncomingQty] = useState("");
   const [editingQtyId, setEditingQtyId] = useState(null);
   const [tempQty, setTempQty] = useState("");
+  const categoryFilterRef = useRef(null);
 
   const fetchComponents = async (searchStr = "") => {
     let url = "/api/inventory/components";
@@ -31,6 +47,16 @@ export default function InventoryBase({ user }) {
     const timer = setTimeout(() => fetchComponents(searchQuery), 350);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryFilterRef.current && !categoryFilterRef.current.contains(event.target)) {
+        setIsCategoryFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Удалить позицию?")) return;
@@ -49,8 +75,20 @@ export default function InventoryBase({ user }) {
     if (res.ok) { setIncomingCompId(null); setIncomingQty(""); fetchComponents(searchQuery); }
   };
 
+  const openEditForm = (component = null) => {
+    setSelectedComponent(null);
+    setEditingComponent(component);
+    setShowForm(true);
+  };
+
+  const closeSidePanel = () => {
+    setShowForm(false);
+    setEditingComponent(null);
+    setSelectedComponent(null);
+  };
+
   const groupedComponents = components
-    .filter(c => selectedCategory === "Все" || c.category === selectedCategory)
+    .filter(c => selectedCategories.length === 0 || selectedCategories.includes(c.category || "Без категории"))
     .reduce((acc, comp) => {
       const cat = comp.category || "Без категории";
       if (!acc[cat]) acc[cat] = [];
@@ -58,78 +96,174 @@ export default function InventoryBase({ user }) {
       return acc;
     }, {});
 
-  const categories = ["Все", ...new Set(components.map(c => c.category).filter(Boolean))];
+  const categories = [...new Set(components.map(c => c.category || "Без категории"))];
   const canEditInventory = ["admin", "warehouse"].includes(user?.role);
+  const visibleCount = Object.values(groupedComponents).reduce((sum, items) => sum + items.length, 0);
+  const categoryFilterLabel = selectedCategories.length === 0
+    ? "Все категории"
+    : selectedCategories.length === 1
+      ? selectedCategories[0]
+      : `Категории: ${selectedCategories.length}`;
 
-  if (showForm) {
-    return <InventoryForm initialData={editingComponent} onBack={() => { setShowForm(false); setEditingComponent(null); }} onSuccess={() => { setShowForm(false); setEditingComponent(null); fetchComponents(); }} />;
-  }
+  const toggleCategory = (category) => {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category]
+    );
+  };
 
   return (
-    <div className="w-full px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Склад ТМЦ</h1>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Всего номенклатуры: {components.length}</p>
+    <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full font-sans antialiased text-slate-800">
+      <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold text-slate-400">Склад</p>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">Склад ТМЦ</h1>
+            <p className="text-sm text-slate-500 mt-2">Показано {visibleCount} из {components.length} позиций.</p>
+          </div>
+          {canEditInventory && (
+            <button onClick={() => openEditForm(null)} className={`${buttonStyles.primary} w-full sm:w-auto h-10 px-5`}>
+              <Icons.Plus /> Создать позицию
+            </button>
+          )}
         </div>
-        {canEditInventory && (
-          <button onClick={() => { setEditingComponent(null); setShowForm(true); }} className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all">
-            <Icons.Plus /> Создать позицию
-          </button>
-        )}
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 mb-8 flex flex-wrap gap-4 items-center">
-        <input type="text" placeholder="ПОИСК..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 min-w-[200px] p-3 text-sm border-0 focus:ring-0 outline-none font-bold placeholder-slate-300" />
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {categories.map(cat => (
-            <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${selectedCategory === cat ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
-              {cat}
-            </button>
-          ))}
-        </div>
+      <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-4 sm:p-5 mb-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,1fr)_280px] gap-3">
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2"><Icons.Search /></span>
+              <input
+                type="text"
+                placeholder="Поиск по складу"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 pl-10 pr-10 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <Icons.Close />
+                </button>
+              )}
+            </div>
+            <div className="relative" ref={categoryFilterRef}>
+              <button
+                type="button"
+                onClick={() => setIsCategoryFilterOpen((value) => !value)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-left text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 focus:border-[#3F8CFF] focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+              >
+                <span className="truncate">{categoryFilterLabel}</span>
+                <Icons.ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isCategoryFilterOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isCategoryFilterOpen && (
+                <div className="absolute right-0 z-20 mt-2 w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                    <span className="text-xs font-bold text-slate-500">Категории</span>
+                    {selectedCategories.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategories([])}
+                        className="text-xs font-semibold text-[#3F8CFF] hover:text-[#1f78ff]"
+                      >
+                        Сбросить
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-72 overflow-y-auto p-2">
+                    {categories.map(cat => (
+                      <label
+                        key={cat}
+                        className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCategories.includes(cat)}
+                          onChange={() => toggleCategory(cat)}
+                          className="h-4 w-4 rounded border-slate-300 text-[#3F8CFF] focus:ring-[#3F8CFF]"
+                        />
+                        <span className="min-w-0 flex-1 truncate">{cat}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedCategories.length > 0 && (
+              <div className="flex flex-wrap gap-2 lg:col-span-2">
+                {selectedCategories.map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => toggleCategory(cat)}
+                  className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  {cat}
+                  <Icons.Close />
+                </button>
+              ))}
+              </div>
+            )}
+          </div>
       </div>
 
       {Object.entries(groupedComponents).map(([category, items]) => (
-        <div key={category} className="mb-12">
-          <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{category}</h2>
-            <div className="h-px flex-1 bg-slate-100" />
+        <div key={category} className="mb-8">
+          <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm flex items-center justify-between gap-3 mb-3">
+            <span>{category}</span>
+            <span className="text-xs text-slate-400">{items.length} поз.</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
             {items.map((comp) => (
-              <div key={comp.id} className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-slate-300 transition-all flex flex-col justify-between group">
-                <div>
-                   <h4 className="font-black text-sm text-slate-900 uppercase leading-tight group-hover:text-slate-600 transition-colors">{comp.name}</h4>
-                   <p className="text-[10px] font-mono text-slate-400 mt-1 uppercase">{comp.part_number}</p>
-                   <div className="flex flex-wrap gap-2 mt-3">
-                     {[comp.package, comp.value, comp.voltage].filter(Boolean).map((attr, i) => (
-                       <span key={i} className="bg-slate-50 text-slate-400 px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wider">{attr}</span>
-                     ))}
-                   </div>
+              <div
+                key={comp.id}
+                onClick={() => setSelectedComponent(comp)}
+                className="bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all flex flex-col justify-between group min-w-0 cursor-pointer"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-black text-base text-slate-900 leading-tight group-hover:text-blue-600 transition-colors truncate">{comp.name}</h4>
+                      <p className="text-xs font-mono text-slate-400 mt-1 truncate">{comp.part_number || "Без артикула"}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${Number(comp.quantity || 0) > 0 ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-rose-100 bg-rose-50 text-rose-600"}`}>
+                      {comp.quantity || 0} шт.
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {[
+                      comp.package,
+                      comp.value,
+                      comp.voltage,
+                      ...Object.entries(comp.specifications || {}).slice(0, 3).map(([key, val]) => `${key}: ${val}`)
+                    ].filter(Boolean).map((attr, i) => (
+                      <span key={i} className="bg-slate-50 text-slate-500 border border-slate-100 px-2.5 py-1 rounded-full text-[11px] font-bold">{attr}</span>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-50">
+                <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-100">
                   {editingQtyId === comp.id ? (
-                    <input type="number" autoFocus className="w-20 p-1 text-sm font-black border-b-2 border-slate-900 outline-none" value={tempQty} onChange={(e) => setTempQty(e.target.value)} onBlur={() => handleUpdateQty(comp.id, tempQty)} onKeyDown={(e) => e.key === 'Enter' && handleUpdateQty(comp.id, tempQty)} />
+                    <input type="number" autoFocus className="w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" value={tempQty} onChange={(e) => setTempQty(e.target.value)} onBlur={() => handleUpdateQty(comp.id, tempQty)} onKeyDown={(e) => e.key === 'Enter' && handleUpdateQty(comp.id, tempQty)} />
                   ) : (
-                    <span onClick={() => { if (canEditInventory) { setEditingQtyId(comp.id); setTempQty(comp.quantity || 0); } }} className={`font-black text-sm ${canEditInventory ? "cursor-pointer hover:text-slate-900" : ""} transition-colors ${comp.quantity > 0 ? "text-slate-900" : "text-rose-500"}`} title={canEditInventory ? "Нажмите для редактирования" : "Остаток на складе"}>
-                      {comp.quantity || 0} шт.
+                    <span onClick={(e) => { e.stopPropagation(); if (canEditInventory) { setEditingQtyId(comp.id); setTempQty(comp.quantity || 0); } }} className={`text-xs font-semibold ${canEditInventory ? "cursor-pointer hover:text-[#3F8CFF]" : ""} transition-colors text-slate-400`} title={canEditInventory ? "Нажмите для редактирования" : "Остаток на складе"}>
+                      Изменить остаток
                     </span>
                   )}
 
                   {canEditInventory && <div className="flex items-center gap-1">
                     {incomingCompId === comp.id ? (
-                      <form onSubmit={(e) => handleIncomingSubmit(e, comp.id)} className="flex items-center gap-1">
-                        <input type="number" className="w-12 p-1 text-[10px] border border-slate-200 rounded-lg" value={incomingQty} onChange={(e) => setIncomingQty(e.target.value)} />
-                        <button type="submit" className="text-slate-900 font-black text-[10px] uppercase">OK</button>
+                      <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => handleIncomingSubmit(e, comp.id)} className="flex items-center gap-2">
+                        <input type="number" className="w-20 rounded-xl border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#3F8CFF]" value={incomingQty} onChange={(e) => setIncomingQty(e.target.value)} />
+                        <button type="submit" className={`${buttonStyles.primary} h-8 px-3`}>OK</button>
                       </form>
                     ) : (
                       <>
-                        <button onClick={() => setIncomingCompId(comp.id)} className="p-1.5 text-slate-300 hover:text-slate-900 transition-colors" title="Оприходовать"><Icons.Incoming /></button>
-                        <button onClick={() => { setEditingComponent(comp); setShowForm(true); }} className="p-1.5 text-slate-300 hover:text-slate-900 transition-colors"><Icons.Edit /></button>
-                        <button onClick={() => handleDelete(comp.id)} className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"><Icons.Trash /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setIncomingCompId(comp.id); }} className={buttonStyles.iconNeutral} title="Оприходовать"><Icons.Incoming /></button>
+                        <button onClick={(e) => { e.stopPropagation(); openEditForm(comp); }} className={buttonStyles.iconNeutral} title="Редактировать"><Icons.Edit /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(comp.id); }} className={buttonStyles.iconDanger} title="Удалить"><Icons.Trash /></button>
                       </>
                     )}
                   </div>}
@@ -139,6 +273,104 @@ export default function InventoryBase({ user }) {
           </div>
         </div>
       ))}
+
+      {selectedComponent && !showForm && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Закрыть карточку"
+            className="hidden flex-1 cursor-default md:block"
+            onClick={closeSidePanel}
+          />
+          <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+            <div className="flex h-full flex-col bg-white">
+              <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-slate-400">Карточка ТМЦ</p>
+                  <h2 className="mt-1 text-xl font-black text-slate-900 break-words">{selectedComponent.name}</h2>
+                  <p className="mt-2 text-sm font-mono text-slate-400">{selectedComponent.part_number || "Без артикула"}</p>
+                </div>
+                <button onClick={closeSidePanel} type="button" className={`${buttonStyles.neutral} shrink-0 h-10 px-4`}>Закрыть</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+                <div className="flex flex-col gap-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                    <p className="text-[11px] font-bold text-slate-400">Категория</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{selectedComponent.category || "Без категории"}</p>
+                  </div>
+                  <div className={`rounded-2xl border px-4 py-3 ${Number(selectedComponent.quantity || 0) > 0 ? "border-emerald-100 bg-emerald-50/60" : "border-rose-100 bg-rose-50/60"}`}>
+                    <p className={`text-[11px] font-bold ${Number(selectedComponent.quantity || 0) > 0 ? "text-emerald-600" : "text-rose-500"}`}>Остаток</p>
+                    <p className={`mt-1 text-sm font-semibold ${Number(selectedComponent.quantity || 0) > 0 ? "text-emerald-700" : "text-rose-600"}`}>{selectedComponent.quantity || 0} шт.</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Базовые параметры</h3>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {[
+                      ["Корпус", selectedComponent.package],
+                      ["Номинал", selectedComponent.value],
+                      ["Напряжение", selectedComponent.voltage ? `${selectedComponent.voltage} В` : ""],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                        <p className="text-[11px] font-bold text-slate-400">{label}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{value || "Не указано"}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Характеристики</h3>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {Object.entries(selectedComponent.specifications || {}).length > 0 ? (
+                      Object.entries(selectedComponent.specifications || {}).map(([key, value]) => (
+                        <div key={key} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                          <span className="text-sm font-semibold text-slate-500">{key}</span>
+                          <span className="min-w-0 text-right text-sm font-semibold text-slate-900">{String(value)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                        Характеристики не заполнены.
+                      </div>
+                    )}
+                  </div>
+                </div>
+                </div>
+              </div>
+              {canEditInventory && (
+                <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+                  <button onClick={() => openEditForm(selectedComponent)} type="button" className={`${buttonStyles.primary} w-full h-11 px-5`}>
+                    <Icons.Edit /> Редактировать
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Закрыть форму"
+            className="hidden flex-1 cursor-default md:block"
+            onClick={closeSidePanel}
+          />
+          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
+            <InventoryForm
+              initialData={editingComponent}
+              panel
+              onBack={closeSidePanel}
+              onSuccess={() => { closeSidePanel(); fetchComponents(searchQuery); }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

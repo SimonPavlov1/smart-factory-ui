@@ -1,1 +1,294 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --app-bg: #f5f5f7;
+  --app-surface: rgba(255, 255, 255, 0.86);
+  --app-surface-strong: #ffffff;
+  --app-surface-soft: rgba(248, 250, 252, 0.82);
+  --app-border: rgba(15, 23, 42, 0.08);
+  --app-text: #111827;
+  --app-text-soft: #475569;
+  --app-muted: #8a94a6;
+  --app-blue: #007aff;
+  --app-blue-soft: rgba(0, 122, 255, 0.12);
+  --app-green: #34c759;
+  --app-red: #ff3b30;
+  --app-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --app-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.theme-dark {
+  color-scheme: dark;
+  --app-bg: #0b0d12;
+  --app-surface: rgba(28, 28, 30, 0.78);
+  --app-surface-strong: #1c1c1e;
+  --app-surface-soft: rgba(44, 44, 46, 0.72);
+  --app-border: rgba(255, 255, 255, 0.1);
+  --app-text: #f5f5f7;
+  --app-text-soft: #d1d5db;
+  --app-muted: #8e8e93;
+  --app-blue: #0a84ff;
+  --app-blue-soft: rgba(10, 132, 255, 0.16);
+  --app-green: #30d158;
+  --app-red: #ff453a;
+  --app-shadow: 0 18px 54px rgba(0, 0, 0, 0.44);
+  --app-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28), 0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(0, 122, 255, 0.12), transparent 34rem),
+    var(--app-bg);
+  color: var(--app-text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button {
+  touch-action: manipulation;
+  font-weight: 650;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent 18rem),
+    var(--app-bg);
+  color: var(--app-text);
+}
+
+.theme-dark.app-shell,
+.theme-dark .app-shell {
+  background:
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.16), transparent 30rem),
+    var(--app-bg);
+}
+
+.app-main {
+  min-width: 0;
+  flex: 1;
+  overflow: auto;
+  border-radius: 28px;
+}
+
+.app-page {
+  width: 100%;
+}
+
+.app-shell {
+  letter-spacing: 0;
+}
+
+.app-shell :where(h1, h2, h3, h4, p, span, label, button, input, select, textarea, a, div) {
+  letter-spacing: 0 !important;
+}
+
+.app-shell :where(h1) {
+  font-size: clamp(1.5rem, 1.1rem + 1vw, 2rem);
+  line-height: 1.12;
+  font-weight: 750;
+}
+
+.app-shell :where(h2) {
+  font-size: clamp(1.25rem, 1rem + 0.6vw, 1.5rem);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.app-shell :where(h3) {
+  font-size: 1rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.app-shell :where(label, .uppercase) {
+  font-size: 0.75rem;
+  line-height: 1.2rem;
+}
+
+.app-shell :where(.font-black) {
+  font-weight: 750 !important;
+}
+
+.app-shell :where(.font-bold) {
+  font-weight: 650 !important;
+}
+
+.app-shell :where(.font-semibold) {
+  font-weight: 600 !important;
+}
+
+.app-shell :where(.font-medium) {
+  font-weight: 500 !important;
+}
+
+.app-shell :where(.font-mono) {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.app-shell :where(.text-\[9px\]) {
+  font-size: 0.625rem !important;
+  line-height: 1rem !important;
+}
+
+.app-shell :where(.text-\[10px\]) {
+  font-size: 0.6875rem !important;
+  line-height: 1rem !important;
+}
+
+.app-shell :where(.text-\[11px\]) {
+  font-size: 0.75rem !important;
+  line-height: 1.1rem !important;
+}
+
+.app-shell :where(.text-xs) {
+  font-size: 0.75rem !important;
+  line-height: 1.1rem !important;
+}
+
+.app-shell :where(.text-sm) {
+  font-size: 0.875rem !important;
+  line-height: 1.35rem !important;
+}
+
+.app-shell :where(button, input, select, textarea) {
+  line-height: 1.2;
+}
+
+.app-theme-toggle {
+  width: 100%;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-soft);
+  color: var(--app-text-soft);
+  border-radius: 16px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.app-theme-toggle:hover {
+  background: var(--app-blue-soft);
+  color: var(--app-blue);
+  border-color: rgba(0, 122, 255, 0.24);
+}
+
+.glass-sidebar {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+
+.theme-dark :where(.bg-white) {
+  background-color: var(--app-surface-strong) !important;
+}
+
+.theme-dark :where(.bg-slate-50, .bg-slate-100) {
+  background-color: var(--app-surface-soft) !important;
+}
+
+.theme-dark :where(.border-slate-100, .border-slate-200, .border-slate-300, .border-white) {
+  border-color: var(--app-border) !important;
+}
+
+.theme-dark :where(.text-slate-900, .text-slate-800, .text-slate-700) {
+  color: var(--app-text) !important;
+}
+
+.theme-dark :where(.text-slate-600, .text-slate-500) {
+  color: var(--app-text-soft) !important;
+}
+
+.theme-dark :where(.text-slate-400, .text-slate-300) {
+  color: var(--app-muted) !important;
+}
+
+.theme-dark :where(input, select, textarea) {
+  background-color: rgba(28, 28, 30, 0.96) !important;
+  color: var(--app-text) !important;
+  border-color: var(--app-border) !important;
+}
+
+.theme-dark :where(input::placeholder, textarea::placeholder) {
+  color: var(--app-muted) !important;
+}
+
+.theme-dark :where(.shadow-sm, .shadow-xs, .shadow-xl, .shadow-lg) {
+  box-shadow: var(--app-shadow-soft) !important;
+}
+
+@media (max-width: 1024px) {
+  .app-shell {
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .app-main {
+    border-radius: 22px;
+  }
+
+  .app-main :where(.p-10) {
+    padding: 20px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .app-main :where(.p-10, .p-8, .p-6) {
+    padding: 14px !important;
+  }
+
+  .app-main :where(.rounded-\[30px\], .rounded-\[28px\], .rounded-3xl, .rounded-2xl) {
+    border-radius: 18px !important;
+  }
+
+  .app-main :where(.text-3xl) {
+    font-size: 1.625rem !important;
+  }
+
+  .app-main :where(.text-2xl) {
+    font-size: 1.375rem !important;
+  }
+}

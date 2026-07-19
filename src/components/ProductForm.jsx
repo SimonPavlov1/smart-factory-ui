@@ -1,20 +1,43 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
-export default function ProductForm({ onBack, initialData = null }) {
+const Icons = {
+  Device: () => (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  ),
+  Assembly: () => (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  ),
+  ArrowLeft: () => (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+  ),
+};
+
+export default function ProductForm({ onBack, initialData = null, panel = false }) {
   const [name, setName] = useState("");
   const [drawingNumber, setDrawingNumber] = useState("");
   const [revision, setRevision] = useState("1.0");
   const [loading, setLoading] = useState(false);
 
-  // Определяем, действительно ли это режим редактирования существующего объекта
   const isEditMode = !!(initialData && initialData.id);
+  const isSubAssemblyUnit = !!(initialData && (initialData.is_subassembly === true || initialData.is_final === false));
+  const typeTitle = isSubAssemblyUnit ? "Сборочная единица" : "Готовое устройство";
+  const typeDescription = isSubAssemblyUnit
+    ? "Узел, плата, корпусная сборка или полуфабрикат, который может входить в состав устройства."
+    : "Финальное изделие, которое можно запускать в производство и ставить в заказ.";
+  const shellClass = panel
+    ? "min-h-full w-full font-sans text-slate-800"
+    : "p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full font-sans text-slate-800";
 
-  // Заполняем стейты при редактировании
   useEffect(() => {
     if (isEditMode) {
       setName(initialData.name || "");
       setDrawingNumber(initialData.drawing_number || "");
-      // На бэкенде поле может называться revision, проверяем оба варианта для надежности
       setRevision(initialData.revision || initialData.version || "1.0");
     }
   }, [initialData, isEditMode]);
@@ -24,45 +47,30 @@ export default function ProductForm({ onBack, initialData = null }) {
     setLoading(true);
 
     try {
-      let url = "";
-      let method = "";
-      let payload = {};
+      const payload = isEditMode
+        ? {
+            name: name.trim(),
+            drawing_number: drawingNumber.trim() || null,
+            revision: revision.trim() || "1.0",
+          }
+        : {
+            name: name.trim(),
+            drawing_number: drawingNumber.trim() || `DEV-${Date.now()}`,
+            version: revision.trim() || "1.0",
+            is_final: !isSubAssemblyUnit,
+            components: [],
+          };
 
-      // Проверяем, какой тип изделия создается/редактируется (прибор или узел)
-      // Если is_subassembly === true ИЛИ is_final === false — это узел (сборочная единица)
-      const isSubAssembly = !!(initialData && (initialData.is_subassembly === true || initialData.is_final === false));
-
-      if (isEditMode) {
-        // --- РЕЖИМ РЕДАКТИРОВАНИЯ СУЩЕСТВУЮЩЕГО ИЗДЕЛИЯ (PUT) ---
-        url = `/api/production/products/${initialData.id}`;
-        method = "PUT";
-        payload = {
-          name: name.trim(),
-          drawing_number: drawingNumber.trim() || null,
-          revision: revision.trim() || "1.0"
-        };
-      } else {
-        // --- РЕЖИМ СОЗДАНИЯ НОВОГО ОБЪЕКТА (POST) ---
-        url = "/api/production/setup-product";
-        method = "POST";
-
-        payload = {
-          name: name.trim(),
-          drawing_number: drawingNumber.trim() || `DEV-${Date.now()}`,
-          version: revision.trim() || "1.0", // Бэкенд ждет "version" в ProductCreateSchema
-          is_final: !isSubAssembly, // Если узел, то is_final = false
-          components: []
-        };
-      }
-
-      const response = await fetch(url, {
-        method: method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        isEditMode ? `/api/production/products/${initialData.id}` : "/api/production/setup-product",
+        {
+          method: isEditMode ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (response.ok) {
-        alert(isEditMode ? "Данные изделия успешно изменены!" : "Успешно сохранено!");
         onBack();
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -76,79 +84,117 @@ export default function ProductForm({ onBack, initialData = null }) {
     }
   };
 
-  // Определяем, работаем ли мы сейчас со сборочной единицей для настройки цвета интерфейса
-  const isSubAssemblyUnit = !!(initialData && (initialData.is_subassembly === true || initialData.is_final === false));
-
   return (
-    <div className="p-6 sm:p-10 max-w-2xl mx-auto bg-white rounded-3xl border border-slate-100 my-6 shadow-xs font-sans text-slate-800">
-      <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
-        <h2 className="text-xl font-bold text-slate-900">
-          {isEditMode
-            ? `✏️ Редактирование паспорта ${isSubAssemblyUnit ? "(узла)" : "(изделия)"}`
-            : isSubAssemblyUnit
-              ? "🧩 Создание сборочной единицы (узла)"
-              : "📦 Создание нового изделия"}
-        </h2>
-        <button onClick={onBack} type="button" className="text-slate-400 hover:text-slate-600 font-bold text-xs uppercase tracking-wider transition-colors">
-          Отмена
-        </button>
+    <div className={shellClass}>
+      <div className={`${panel ? "sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6" : "mb-6"} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
+        <div>
+          <button
+            onClick={onBack}
+            type="button"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-bold text-xs uppercase tracking-wider mb-3"
+          >
+            <Icons.ArrowLeft />
+            Назад
+          </button>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            {isEditMode ? "Паспорт изделия" : "Новое изделие"}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {isEditMode ? "Обновите основные реквизиты карточки." : "Создайте карточку, затем добавьте состав, документы и фото."}
+          </p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {/* НАИМЕНОВАНИЕ */}
-        <div>
-          <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
-            Название устройства / Изделия *
-          </label>
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={isSubAssemblyUnit ? "Например: Плата управления индикацией" : "Например: Центральный процессорный блок (ЦПБ)"}
-            className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 font-medium bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
-          />
-        </div>
-
-        {/* НОМЕР ЧЕРТЕЖА И РЕВИЗИЯ */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
-              Децимальный номер (Номер чертежа)
-            </label>
-            <input
-              type="text"
-              value={drawingNumber}
-              onChange={(e) => setDrawingNumber(e.target.value)}
-              placeholder="АБВГ.123456.001"
-              className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-700 font-mono bg-white focus:outline-none focus:border-blue-500 placeholder-slate-400"
-            />
+      <form onSubmit={handleSubmit} className={`${panel ? "p-5 sm:p-6" : ""} grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-5`}>
+        <section className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm h-fit">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Тип карточки</p>
+          <div className={`border rounded-2xl p-4 ${isSubAssemblyUnit ? "bg-indigo-50 border-indigo-100 text-indigo-700" : "bg-blue-50 border-blue-100 text-blue-700"}`}>
+            <div className="w-10 h-10 rounded-2xl bg-white/80 border border-current/20 flex items-center justify-center mb-3">
+              {isSubAssemblyUnit ? <Icons.Assembly /> : <Icons.Device />}
+            </div>
+            <h2 className="text-base font-black text-slate-900">{typeTitle}</h2>
+            <p className="text-xs leading-relaxed mt-2 text-slate-600">{typeDescription}</p>
           </div>
 
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5">
-              Ревизия / Версия *
-            </label>
-            <input
-              type="text"
-              required
-              value={revision}
-              onChange={(e) => setRevision(e.target.value)}
-              placeholder="1.0"
-              className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 font-semibold bg-white focus:outline-none focus:border-blue-500"
-            />
-          </div>
-        </div>
+          {!isEditMode && (
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-xs font-bold text-slate-700">После сохранения</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Откроется база изделий. Зайдите в карточку и добавьте дерево состава: сборочные единицы, покупные позиции и работы.
+              </p>
+            </div>
+          )}
+        </section>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className={`w-full text-white p-3 rounded-lg font-bold uppercase text-xs tracking-wider mt-4 transition-all ${
-            isSubAssemblyUnit ? "bg-indigo-600 hover:bg-indigo-700" : "bg-blue-600 hover:bg-blue-700"
-          } disabled:bg-slate-200 disabled:text-slate-400`}
-        >
-          {loading ? "Сохранение..." : isEditMode ? "Сохранить изменения" : "Внести в базу данных"}
-        </button>
+        <section className="bg-white border border-slate-100 rounded-3xl shadow-sm overflow-hidden">
+          <div className="p-5 sm:p-6 border-b border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Основные данные</p>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                  Наименование *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={isSubAssemblyUnit ? "Например: Плата УТУД" : "Например: УТУД-10"}
+                  className="w-full p-4 text-base border border-slate-200 rounded-2xl text-slate-900 font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder-slate-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px] gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                    Децимальный №
+                  </label>
+                  <input
+                    type="text"
+                    value={drawingNumber}
+                    onChange={(e) => setDrawingNumber(e.target.value)}
+                    placeholder="АБВГ.123456.001"
+                    className="w-full p-3.5 text-sm border border-slate-200 rounded-2xl text-slate-800 font-mono bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">
+                    Ревизия *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={revision}
+                    onChange={(e) => setRevision(e.target.value)}
+                    placeholder="1.0"
+                    className="w-full p-3.5 text-sm border border-slate-200 rounded-2xl text-slate-900 font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6 bg-slate-50 flex flex-col sm:flex-row justify-between gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-5 py-3 rounded-2xl border border-slate-200 bg-white text-slate-600 font-bold text-xs uppercase tracking-wider hover:bg-slate-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className={`px-6 py-3 rounded-2xl text-white font-black uppercase text-xs tracking-wider transition-all ${
+                isSubAssemblyUnit ? "bg-indigo-600 hover:bg-indigo-700" : "bg-blue-600 hover:bg-blue-700"
+              } disabled:bg-slate-200 disabled:text-slate-400`}
+            >
+              {loading ? "Сохранение..." : isEditMode ? "Сохранить паспорт" : "Создать карточку"}
+            </button>
+          </div>
+        </section>
       </form>
     </div>
   );
