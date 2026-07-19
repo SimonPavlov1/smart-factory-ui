@@ -105,7 +105,7 @@ function roleListLabel(user) {
         <div className="text-[#3F8CFF] group-hover:scale-105 transition-transform">
           <Icons.Logo />
         </div>
-        <h2 className="text-[28px] xl:text-[32px] font-bold text-[#3F8CFF] tracking-tight">MES</h2>
+        <h2 className="text-[28px] xl:text-[32px] font-bold text-[#3F8CFF] tracking-tight">Проекты</h2>
       </div>
 
       <nav className="flex-1 space-y-2 text-base xl:text-lg max-lg:flex max-lg:overflow-x-auto max-lg:space-y-0 max-lg:gap-2 max-lg:pb-1">
