@@ -119,7 +119,7 @@ export default function InventoryBase({ user }) {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full font-sans antialiased text-slate-800">
+    <div className="w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
       <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -220,7 +220,7 @@ export default function InventoryBase({ user }) {
             <span className="text-xs text-slate-400">{items.length} поз.</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
             {items.map((comp) => (
               <div
                 key={comp.id}

@@ -667,7 +667,7 @@ function TaskList({ endpoint, user, onOpenPage, title, subtitle }) {
   const [activeTaskId, setActiveTaskId] = useState(null);
 
   return (
-    <div className="p-10 space-y-6">
+    <div className="w-full max-w-none space-y-6 p-4 sm:p-6 lg:p-10">
       <div>
         <h1 className="text-2xl font-black text-slate-900">{title}</h1>
         <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
@@ -677,7 +677,7 @@ function TaskList({ endpoint, user, onOpenPage, title, subtitle }) {
       ) : tasks.length === 0 ? (
         <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center text-slate-400">Открытых задач нет.</div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
           {tasks.map((task) => (
             <TaskCard
               key={task.id}
@@ -710,7 +710,7 @@ const Dashboard = ({ user, onOpenPage }) => {
   }, {});
 
   return (
-    <div className="p-10 space-y-8">
+    <div className="w-full max-w-none space-y-8 p-4 sm:p-6 lg:p-10">
       <div>
         <h1 className="text-3xl font-black text-slate-900">Панель</h1>
         <p className="text-sm text-slate-500 mt-2">
@@ -736,7 +736,7 @@ const Dashboard = ({ user, onOpenPage }) => {
           <h2 className="text-lg font-black text-slate-900">Ближайшие задачи</h2>
           <button onClick={() => onOpenPage("Мои задачи")} className="text-xs font-bold text-blue-600">Все мои задачи</button>
         </div>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
           {tasks.slice(0, 4).map((task) => (
             <TaskCard
               key={task.id}
@@ -1276,7 +1276,7 @@ function Personnel({ currentUser }) {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-10 space-y-6 max-w-7xl mx-auto w-full">
+    <div className="w-full max-w-none space-y-6 p-4 sm:p-6 lg:p-10">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[11px] font-bold text-slate-400">Администрирование</p>
@@ -1322,7 +1322,7 @@ function Personnel({ currentUser }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {filteredUsers.map((user) => (
             <button key={user.id} type="button" onClick={() => openUserPanel(user)} className="rounded-3xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -3,6 +3,149 @@ import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 // Импортируем ваш локальный ГОСТ шрифт
 
+const monthNames = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+];
+const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+function dateToValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function buildCalendarDays(viewDate) {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - startOffset);
+  return Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
+}
+
+function CalendarField({ value, onChange, className = "" }) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateValue(value);
+  const [viewDate, setViewDate] = useState(selectedDate || new Date());
+  const days = buildCalendarDays(viewDate);
+  const todayValue = dateToValue(new Date());
+
+  useEffect(() => {
+    if (selectedDate) setViewDate(selectedDate);
+  }, [value]);
+
+  const selectDate = (date) => {
+    onChange(dateToValue(date));
+    setOpen(false);
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-left text-sm font-semibold text-slate-800 outline-none transition-all hover:border-blue-100 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+      >
+        <span>{selectedDate ? selectedDate.toLocaleDateString("ru-RU") : "Выберите дату"}</span>
+        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-full min-w-[292px] rounded-3xl border border-slate-100 bg-white p-4 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:bg-slate-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="text-sm font-black text-slate-900">
+              {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:bg-slate-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
+            {weekDays.map((day) => <div key={day} className="py-1">{day}</div>)}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {days.map((date) => {
+              const dateValue = dateToValue(date);
+              const isCurrentMonth = date.getMonth() === viewDate.getMonth();
+              const isSelected = value === dateValue;
+              const isToday = todayValue === dateValue;
+              return (
+                <button
+                  key={dateValue}
+                  type="button"
+                  onClick={() => selectDate(date)}
+                  className={`flex h-9 items-center justify-center rounded-xl text-sm font-semibold transition-all ${
+                    isSelected
+                      ? "bg-[#3F8CFF] text-white shadow-sm"
+                      : isToday
+                      ? "border border-blue-100 bg-blue-50 text-[#3F8CFF]"
+                      : isCurrentMonth
+                      ? "text-slate-700 hover:bg-slate-50"
+                      : "text-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(todayValue);
+                setViewDate(new Date());
+                setOpen(false);
+              }}
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50"
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
+            >
+              Очистить
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManufacturingPage() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -15,9 +158,9 @@ export default function ManufacturingPage() {
   const [plannedDeliveryDate, setPlannedDeliveryDate] = useState("");
   const [selectedItems, setSelectedItems] = useState([{ product_id: "", quantity: 1 }]);
   const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
 
-  // Состояния для модального окна комплектующих (BOM)
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  // Сводная комплектация заказа
   const [activeOrder, setActiveOrder] = useState(null);
   const [orderDetail, setOrderDetail] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
@@ -61,6 +204,23 @@ export default function ManufacturingPage() {
     packer: "Упаковщик",
   };
 
+  const fieldClass = "w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10";
+  const selectClass = `${fieldClass} appearance-none pr-10 font-semibold`;
+  const labelClass = "block text-[11px] font-bold text-slate-500 mb-2";
+  const primaryButtonClass = "inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md active:translate-y-0 disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:translate-y-0";
+  const neutralButtonClass = "inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 active:translate-y-0";
+  const dangerActionButtonClass = "inline-flex min-h-10 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 px-4 text-sm font-semibold text-rose-600 transition-all duration-150 hover:-translate-y-0.5 hover:bg-rose-100 hover:text-rose-700 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0";
+  const dangerButtonClass = "inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-rose-500 transition-all duration-150 hover:-translate-y-0.5 hover:bg-rose-100 hover:text-rose-700 active:translate-y-0 disabled:opacity-30 disabled:hover:translate-y-0";
+  const compactFieldClass = "w-full min-h-9 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition-all focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50 disabled:text-slate-400";
+
+  const SelectChevron = () => (
+    <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
+    </span>
+  );
+
   const fetchOrders = async () => {
     try {
       setErrorText("");
@@ -89,38 +249,23 @@ export default function ManufacturingPage() {
     }
   };
 
-  const handleOpenDetails = async (order) => {
-    setActiveOrder(order);
-    setIsDetailsModalOpen(true);
-    setMaterialsLoading(true);
-    setRequiredMaterials([]);
-    setMaterialsError("");
+  const handleOpenOrder = async (order, options = {}) => {
+    const { background = false, preserveScroll = false } = options;
+    const scrollY = preserveScroll ? window.scrollY : null;
 
-    try {
-      const res = await fetch(`/api/manufacturing/orders/${order.id}/bom-summary`);
-      if (res.ok) {
-        const bomData = await res.json();
-        setRequiredMaterials(bomData);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setMaterialsError(err.detail || "Не удалось загрузить спецификацию заказа");
-      }
-    } catch (err) {
-      console.error("Ошибка сети при запросе BOM:", err);
-      setMaterialsError("Ошибка сети при запросе спецификации заказа");
-    } finally {
-      setMaterialsLoading(false);
-    }
-  };
-
-  const handleOpenOrder = async (order) => {
     setActiveOrder(order);
-    setOrderDetail(null);
+    if (!background) setOrderDetail(null);
     setOrderDetailError("");
-    setOrderDetailLoading(true);
+    if (!background) setOrderDetailLoading(true);
+    if (!background) setRequiredMaterials([]);
+    setMaterialsError("");
+    if (!background) setMaterialsLoading(true);
 
     try {
-      const res = await fetch(`/api/manufacturing/orders/${order.id}`);
+      const [res, bomRes] = await Promise.all([
+        fetch(`/api/manufacturing/orders/${order.id}`),
+        fetch(`/api/manufacturing/orders/${order.id}/bom-summary`),
+      ]);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setOrderDetailError(data.detail || "Не удалось загрузить заказ");
@@ -135,11 +280,21 @@ export default function ManufacturingPage() {
         usersByRole[role] = usersRes.ok ? await usersRes.json() : [];
       }));
       setTaskUsersByRole(usersByRole);
+      if (bomRes.ok) {
+        setRequiredMaterials(await bomRes.json());
+      } else {
+        const bomData = await bomRes.json().catch(() => ({}));
+        setMaterialsError(bomData.detail || "Не удалось загрузить сводную комплектацию");
+      }
     } catch (err) {
       console.error(err);
       setOrderDetailError("Ошибка сети при загрузке заказа");
     } finally {
-      setOrderDetailLoading(false);
+      if (!background) setOrderDetailLoading(false);
+      if (!background) setMaterialsLoading(false);
+      if (scrollY !== null) {
+        requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: "auto" }));
+      }
     }
   };
 
@@ -156,7 +311,7 @@ export default function ManufacturingPage() {
         alert(data.detail || "Не удалось назначить задачу");
         return;
       }
-      await handleOpenOrder(activeOrder);
+      await handleOpenOrder(activeOrder, { background: true, preserveScroll: true });
     } finally {
       setAssigningTaskId(null);
     }
@@ -171,7 +326,7 @@ export default function ManufacturingPage() {
         alert(data.detail || "Не удалось взять задачу в работу");
         return;
       }
-      await handleOpenOrder(activeOrder);
+      await handleOpenOrder(activeOrder, { background: true, preserveScroll: true });
     } finally {
       setAssigningTaskId(null);
     }
@@ -190,7 +345,7 @@ export default function ManufacturingPage() {
         alert(data.detail || "Не удалось изменить дедлайн");
         return;
       }
-      await handleOpenOrder(activeOrder);
+      await handleOpenOrder(activeOrder, { background: true, preserveScroll: true });
     } finally {
       setAssigningTaskId(null);
     }
@@ -311,11 +466,23 @@ export default function ManufacturingPage() {
     setSelectedItems(updated);
   };
 
+  const openCreateOrderPanel = () => {
+    setCreateError("");
+    setIsModalOpen(true);
+  };
+
   const handleCreateOrder = async (e) => {
     e.preventDefault();
-    if (!customerName.trim()) return alert("Укажите наименование заказчика");
+    setCreateError("");
+    if (!customerName.trim()) {
+      setCreateError("Укажите наименование заказчика");
+      return;
+    }
     const hasInvalidItems = selectedItems.some(item => !item.product_id);
-    if (hasInvalidItems) return alert("Проверьте правильность выбора изделий");
+    if (hasInvalidItems) {
+      setCreateError("Проверьте правильность выбора изделий");
+      return;
+    }
 
     setCreateLoading(true);
     try {
@@ -333,20 +500,20 @@ export default function ManufacturingPage() {
       });
 
       if (res.ok) {
-        alert("Многопозиционный производственный заказ успешно создан!");
         setIsModalOpen(false);
         setCustomerName("");
         setPlannedDeliveryDate("");
+        setCreateError("");
         if (products.length > 0) {
           setSelectedItems([{ product_id: products[0].id, quantity: 1 }]);
         }
         await fetchOrders();
       } else {
         const errorData = await res.json();
-        alert(`Ошибка: ${errorData.detail || "Не удалось создать заказ"}`);
+        setCreateError(errorData.detail || "Не удалось создать заказ");
       }
     } catch (err) {
-      alert("Ошибка сети");
+      setCreateError("Ошибка сети");
     } finally {
       setCreateLoading(false);
     }
@@ -385,6 +552,16 @@ export default function ManufacturingPage() {
     return "border-slate-200 bg-slate-50 text-slate-400";
   };
 
+  const orderStatusClass = (status) => {
+    if (status === "Materials Issued") return "border-amber-100 bg-amber-50 text-amber-700";
+    if (status === "Reserved") return "border-blue-100 bg-blue-50 text-blue-700";
+    if (["In Assembly", "Quality Check", "Ready For Packing", "Finished Goods", "Ready To Ship"].includes(status)) {
+      return "border-emerald-100 bg-emerald-50 text-emerald-700";
+    }
+    if (status === "Procurement Required" || status === "Repair Required") return "border-rose-100 bg-rose-50 text-rose-700";
+    return "border-slate-100 bg-slate-50 text-slate-600";
+  };
+
   const getCurrentStage = (detail) => {
     const stages = detail?.stages || [];
     return stages.find((stage) => ["in_progress", "assigned", "open", "waiting_delivery"].includes(stage.status)) ||
@@ -393,113 +570,235 @@ export default function ManufacturingPage() {
       stages[stages.length - 1];
   };
 
+  const MaterialsSummary = ({ compact = false }) => {
+    if (materialsLoading) {
+      return <p className="py-6 text-center text-sm text-slate-400">Загрузка сводной комплектации...</p>;
+    }
+    if (materialsError) {
+      return <p className="py-6 text-center text-sm text-red-600">{materialsError}</p>;
+    }
+    if (requiredMaterials.length === 0) {
+      return <p className="py-6 text-center text-sm text-slate-400">Комплектующие не найдены.</p>;
+    }
+
+    const grouped = requiredMaterials.reduce((acc, item) => {
+      const device = item.device || "Готовое изделие";
+      const assembly = item.assembly || "Основной состав";
+      const category = item.category || "Прочее";
+      if (!acc[device]) acc[device] = {};
+      if (!acc[device][assembly]) acc[device][assembly] = {};
+      if (!acc[device][assembly][category]) acc[device][assembly][category] = [];
+      acc[device][assembly][category].push(item);
+      return acc;
+    }, {});
+
+    return (
+      <div className={compact ? "space-y-3" : "space-y-4"}>
+        {Object.entries(grouped).map(([device, assemblies]) => (
+          <div key={device} className="rounded-2xl border border-slate-100 bg-white p-4">
+            <h3 className="border-b border-slate-100 pb-2 text-sm font-bold text-slate-900">{device}</h3>
+            {Object.entries(assemblies).map(([assembly, categories]) => (
+              <div key={assembly} className="mt-3">
+                <h4 className="text-xs font-bold text-slate-600">{assembly}</h4>
+                {Object.entries(categories).map(([category, items]) => (
+                  <div key={category} className="mt-2">
+                    <p className="mb-1 text-[10px] font-bold text-slate-400">{category}</p>
+                    <div className="space-y-1">
+                      {items.map((mat) => (
+                        <div key={mat.id} className="flex justify-between gap-4 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold text-slate-800">{mat.name}</span>
+                            <span className="block truncate text-[10px] text-slate-400">
+                              {mat.item_type === "purchased_product" ? "Покупное изделие/узел" :
+                               mat.item_type === "unresolved_purchase" ? "Непривязанная позиция" :
+                               "Покупной компонент"}
+                              {mat.sku && mat.sku !== "—" ? ` · ${mat.sku}` : ""}
+                              {mat.designators ? ` · ${mat.designators}` : ""}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-bold text-slate-800">{mat.qty} шт.</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (activeOrder && (orderDetail || orderDetailLoading || orderDetailError)) {
     const currentStage = getCurrentStage(orderDetail);
     return (
-      <div className="p-10 relative">
-        <div className="flex flex-col lg:flex-row justify-between gap-4 mb-8 border-b border-slate-200 pb-5">
-          <div>
-            <button
-              onClick={() => { setActiveOrder(null); setOrderDetail(null); setOrderDetailError(""); }}
-              className="text-blue-600 hover:text-blue-700 font-bold text-xs uppercase tracking-wider mb-2"
-            >
-              Назад к заказам
-            </button>
-            <h1 className="text-2xl font-bold text-slate-900">Заказ #{activeOrder.id}</h1>
-            <p className="text-xs text-slate-400 mt-1">{activeOrder.customer_name || "Заказчик не указан"}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleDeleteOrder(orderDetail || activeOrder)}
-              disabled={loading}
-              className="text-xs font-bold uppercase text-rose-600 bg-rose-50 px-4 py-3 rounded-xl border border-rose-100 disabled:opacity-50"
-            >
-              Удалить заказ
-            </button>
+      <div className="relative w-full max-w-none p-4 sm:p-6 lg:p-10">
+        <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <button
+                type="button"
+                onClick={() => { setActiveOrder(null); setOrderDetail(null); setOrderDetailError(""); }}
+                className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-[#3F8CFF] transition-colors hover:text-[#1f78ff]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Назад к заказам
+              </button>
+              <p className="text-[11px] font-bold text-slate-400">Производственный заказ</p>
+              <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <h1 className="truncate text-2xl font-black text-slate-900 sm:text-3xl">Заказ #{activeOrder.id}</h1>
+                {orderDetail && (
+                  <span className={`inline-flex w-fit items-center rounded-2xl border px-3 py-1.5 text-xs font-bold ${orderStatusClass(orderDetail.status)}`}>
+                    {statusLabels[orderDetail.status] || orderDetail.status}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-sm font-semibold text-slate-500">{activeOrder.customer_name || "Заказчик не указан"}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => handleOpenOrder(activeOrder, { background: true, preserveScroll: true })}
+                disabled={orderDetailLoading}
+                className={neutralButtonClass}
+              >
+                Обновить
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteOrder(orderDetail || activeOrder)}
+                disabled={loading}
+                className={dangerActionButtonClass}
+              >
+                Удалить заказ
+              </button>
+            </div>
           </div>
         </div>
 
         {orderDetailLoading ? (
-          <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-white text-slate-400 font-medium">
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-400">
             Загрузка заказа...
           </div>
         ) : orderDetailError ? (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm">{orderDetailError}</div>
+          <div className="rounded-3xl border border-red-100 bg-red-50 p-5 text-sm font-semibold text-red-700">{orderDetailError}</div>
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 mb-8">
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Паспорт заказа</p>
-	                <div className="space-y-3">
-                  {currentStage && (
-                    <div className={`border rounded-xl p-3 ${stageClassName(currentStage.status)}`}>
-                      <p className="text-[10px] uppercase font-black tracking-wider opacity-70">Текущий этап</p>
-                      <p className="text-sm font-black mt-0.5">{currentStage.title}</p>
-                      <p className="text-[10px] mt-1">{stageLabels[currentStage.status] || currentStage.status}</p>
-                    </div>
-                  )}
+            <div className="mb-6 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+              <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Статус</p>
-                    <p className="text-sm font-bold text-slate-900">{statusLabels[orderDetail.status] || orderDetail.status}</p>
+                    <p className="text-[11px] font-bold text-slate-400">Паспорт заказа</p>
+                    <h2 className="mt-1 text-lg font-black text-slate-900">Основная информация</h2>
                   </div>
-                  <div>
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Заказчик</p>
-                    <p className="text-sm font-semibold text-slate-700">{orderDetail.customer_name || "Не указан"}</p>
-                  </div>
-	                  <div>
-	                    <p className="text-[10px] uppercase text-slate-400 font-bold">Дата создания</p>
-	                    <p className="text-sm font-semibold text-slate-700">
-	                      {orderDetail.created_at ? new Date(orderDetail.created_at).toLocaleString("ru-RU") : "—"}
-	                    </p>
-	                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Плановая поставка</p>
-                    <p className="text-sm font-semibold text-slate-700">{formatDate(orderDetail.planned_delivery_date)}</p>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#3F8CFF]">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
                   </div>
                 </div>
-              </div>
+                <div className="space-y-3">
+                  {currentStage && (
+                    <div className={`rounded-2xl border p-4 ${stageClassName(currentStage.status)}`}>
+                      <p className="text-[11px] font-bold opacity-70">Текущий этап</p>
+                      <p className="mt-1 text-sm font-black">{currentStage.title}</p>
+                      <p className="mt-1 text-xs font-semibold opacity-75">{stageLabels[currentStage.status] || currentStage.status}</p>
+                    </div>
+                  )}
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                    <p className="text-[11px] font-bold text-slate-400">Статус</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{statusLabels[orderDetail.status] || orderDetail.status}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                    <p className="text-[11px] font-bold text-slate-400">Заказчик</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">{orderDetail.customer_name || "Не указан"}</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                      <p className="text-[11px] font-bold text-slate-400">Дата создания</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">
+                        {orderDetail.created_at ? new Date(orderDetail.created_at).toLocaleString("ru-RU") : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                      <p className="text-[11px] font-bold text-slate-400">Плановая поставка</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{formatDate(orderDetail.planned_delivery_date)}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Состав заказа</p>
+              <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex flex-col gap-1">
+                  <p className="text-[11px] font-bold text-slate-400">Состав заказа</p>
+                  <h2 className="text-lg font-black text-slate-900">Изделия в заказе</h2>
+                </div>
                 <div className="space-y-2">
                   {orderDetail.items?.map((item) => (
-                    <div key={item.id} className="flex justify-between gap-4 p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                      <span className="text-sm font-semibold text-slate-900 truncate">
-                        {item.product?.name || `Изделие ID ${item.product_id}`}
-                        {item.product?.drawing_number && <span className="block text-[10px] font-mono text-slate-400 mt-0.5">{item.product.drawing_number}</span>}
-                      </span>
-                      <span className="text-sm font-bold text-slate-800 shrink-0">{item.quantity} шт.</span>
+                    <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-900">{item.product?.name || `Изделие ID ${item.product_id}`}</p>
+                        {item.product?.drawing_number && <p className="mt-1 truncate font-mono text-xs text-slate-400">{item.product.drawing_number}</p>}
+                      </div>
+                      <span className="w-fit shrink-0 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700">{item.quantity} шт.</span>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-              <div className="flex justify-between items-center gap-4 mb-5">
+            <section className="mb-6 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Производственная цепочка</h2>
-                  <p className="text-xs text-slate-400 mt-1">Этапы заполняются по задачам, созданным системой для этого заказа</p>
+                  <p className="text-[11px] font-bold text-slate-400">Комплектация</p>
+                  <h2 className="mt-1 text-lg font-black text-slate-900">Сводная комплектация</h2>
+                  <p className="mt-1 text-sm text-slate-500">Комплектующие и покупные позиции по изделиям заказа.</p>
                 </div>
                 <button
-                  onClick={() => handleOpenOrder(activeOrder)}
-                  className="text-xs font-bold uppercase text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200"
+                  type="button"
+                  onClick={downloadPDF}
+                  disabled={materialsLoading || requiredMaterials.length === 0}
+                  className={`${neutralButtonClass} disabled:opacity-50`}
+                >
+                  PDF
+                </button>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                <MaterialsSummary compact />
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400">Маршрут</p>
+                  <h2 className="mt-1 text-lg font-black text-slate-900">Производственная цепочка</h2>
+                  <p className="mt-1 text-sm text-slate-500">Этапы заполняются по задачам, созданным системой для этого заказа.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleOpenOrder(activeOrder, { background: true, preserveScroll: true })}
+                  disabled={orderDetailLoading}
+                  className={neutralButtonClass}
                 >
                   Обновить
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                 {orderDetail.stages?.map((stage, index) => (
-                  <div key={stage.key} className={`border rounded-xl p-3 ${stageClassName(stage.status)}`}>
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-full bg-white/80 border border-current flex items-center justify-center text-[10px] font-black shrink-0">
+                  <div key={stage.key} className={`rounded-2xl border p-4 ${stageClassName(stage.status)}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl border border-current bg-white/80 text-xs font-black">
                         {index + 1}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-black uppercase tracking-wider">{stage.title}</p>
-                        <p className="text-[10px] opacity-75 mt-0.5">{stage.description}</p>
-                        <span className="inline-flex mt-2 text-[10px] font-bold uppercase bg-white/70 border border-current rounded px-1.5 py-0.5">
+                        <p className="text-sm font-black">{stage.title}</p>
+                        <p className="mt-1 text-xs font-semibold opacity-75">{stage.description}</p>
+                        <span className="mt-3 inline-flex rounded-xl border border-current bg-white/70 px-2 py-1 text-[11px] font-bold">
                           {stageLabels[stage.status] || stage.status}
                         </span>
                       </div>
@@ -508,50 +807,53 @@ export default function ManufacturingPage() {
                     {stage.tasks?.length > 0 && (
                       <div className="mt-3 space-y-2">
                         {stage.tasks.map((task) => (
-                          <div key={task.id} className="bg-white/80 border border-white rounded-lg p-2 text-slate-700">
-                            <p className="text-[11px] font-bold text-slate-900">{task.title}</p>
-	                            <p className="text-[10px] text-slate-400 mt-0.5">
-	                              {roleLabels[task.role] || task.role} · {stageLabels[task.status] || task.status}
-	                            </p>
-	                            <p className="text-[10px] text-slate-500 mt-1">
-	                              Исполнитель: <span className="font-bold text-slate-700">{task.assigned_user?.full_name || task.assigned_user?.username || "не назначен"}</span>
-	                            </p>
-                            <p className="text-[10px] text-slate-500 mt-1">
+                          <div key={task.id} className="rounded-2xl border border-white/80 bg-white/85 p-3 text-slate-700 shadow-sm">
+                            <p className="text-xs font-bold text-slate-900">{task.title}</p>
+                            <p className="mt-1 text-[11px] font-semibold text-slate-400">
+                              {roleLabels[task.role] || task.role} · {stageLabels[task.status] || task.status}
+                            </p>
+                            <p className="mt-2 text-[11px] text-slate-500">
+                              Исполнитель: <span className="font-bold text-slate-700">{task.assigned_user?.full_name || task.assigned_user?.username || "не назначен"}</span>
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-500">
                               Дедлайн: <span className="font-bold text-slate-700">{formatDate(task.due_date)}</span>
                             </p>
                             {task.completed_at && (
-                              <p className="text-[10px] text-emerald-600 mt-1">
+                              <p className="mt-1 text-[11px] font-semibold text-emerald-600">
                                 Выполнено: {new Date(task.completed_at).toLocaleString("ru-RU")}
                               </p>
                             )}
                             {task.status !== "done" && (
-                              <div className="mt-2 grid grid-cols-1 gap-1.5">
-                                <select
-                                  value={task.assigned_user_id || ""}
-                                  disabled={assigningTaskId === task.id}
-                                  onChange={(e) => assignTask(task, e.target.value)}
-                                  className="w-full p-1.5 text-[10px] border border-slate-200 rounded-md bg-white text-slate-700 outline-none"
-                                >
-                                  <option value="">Назначить сотрудника</option>
-                                  {(taskUsersByRole[task.role] || []).map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                      {user.full_name || user.username}
-                                    </option>
-                                  ))}
-                                </select>
+                              <div className="mt-3 grid grid-cols-1 gap-2">
+                                <div className="relative">
+                                  <select
+                                    value={task.assigned_user_id || ""}
+                                    disabled={assigningTaskId === task.id}
+                                    onChange={(e) => assignTask(task, e.target.value)}
+                                    className={`${compactFieldClass} appearance-none pr-8`}
+                                  >
+                                    <option value="">Назначить сотрудника</option>
+                                    {(taskUsersByRole[task.role] || []).map((user) => (
+                                      <option key={user.id} value={user.id}>
+                                        {user.full_name || user.username}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <SelectChevron />
+                                </div>
                                 <input
                                   type="date"
                                   value={inputDate(task.due_date)}
                                   disabled={assigningTaskId === task.id}
                                   onChange={(e) => setTaskDeadline(task, e.target.value)}
-                                  className="w-full p-1.5 text-[10px] border border-slate-200 rounded-md bg-white text-slate-700 outline-none"
+                                  className={compactFieldClass}
                                 />
                                 {["assigned", "open"].includes(task.status) && (
                                   <button
                                     type="button"
                                     disabled={assigningTaskId === task.id}
                                     onClick={() => takeTask(task)}
-                                    className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-md px-2 py-1.5 disabled:opacity-50"
+                                    className={`${primaryButtonClass} min-h-9 px-3 py-2 text-xs`}
                                   >
                                     Взять в работу
                                   </button>
@@ -565,7 +867,7 @@ export default function ManufacturingPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           </>
         )}
       </div>
@@ -573,305 +875,250 @@ export default function ManufacturingPage() {
   }
 
   return (
-    <div className="p-10 relative">
-      {/* Шапка */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <div className="relative w-full max-w-none p-4 sm:p-6 lg:p-10">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Производственные заказы</h1>
-          <p className="text-xs text-slate-400 mt-1">Управление сборкой комплексных заказов клиентов</p>
+          <p className="text-[11px] font-bold text-slate-400">Производство</p>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-black text-slate-900">Производственные заказы</h1>
+          <p className="mt-2 text-sm text-slate-500">Заказы клиентов, комплектация и производственная цепочка.</p>
         </div>
-        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-          <button onClick={fetchOrders} className="flex-1 sm:flex-none text-xs font-bold uppercase text-slate-600 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm">
+            {orders.length} заказов
+          </div>
+          <button onClick={fetchOrders} className={neutralButtonClass}>
             Обновить
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex-1 sm:flex-none text-xs font-bold uppercase text-white bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-xl shadow-sm flex items-center justify-center gap-2"
+            onClick={openCreateOrderPanel}
+            className={primaryButtonClass}
           >
-            Создать комплексный заказ
+            Создать заказ
           </button>
         </div>
       </div>
 
-      {errorText && <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 text-sm">{errorText}</div>}
+      {errorText && <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">{errorText}</div>}
 
-      {/* Список заказов */}
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {orders.length > 0 ? (
-          orders.map((order) => (
-            <div key={order.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
-              <div className="space-y-2 flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="font-bold text-lg text-slate-900">Заказ #{order.id}</p>
-
-	                  <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
-	                    order.status === "Materials Issued"
-	                      ? "bg-amber-50 text-amber-600 border-amber-100"
-	                      : order.status === "Reserved"
-	                      ? "bg-blue-50 text-blue-600 border-blue-100"
-	                      : ["In Assembly", "Quality Check", "Ready For Packing", "Finished Goods", "Ready To Ship"].includes(order.status)
-	                      ? "bg-green-50 text-green-600 border-green-100"
-	                      : order.status === "Procurement Required" || order.status === "Repair Required"
-	                      ? "bg-rose-50 text-rose-600 border-rose-100"
-	                      : "bg-blue-50 text-blue-600 border-blue-100"
-	                  }`}>
-	                    {statusLabels[order.status] || order.status}
-	                  </span>
-                </div>
-
-	                <p className="text-sm text-slate-700 font-medium">
-	                  Заказчик: <span className="text-slate-900 font-bold">{order.customer_name || "Не указан"}</span>
-	                </p>
-                <p className="text-xs text-slate-500">
-                  Плановая поставка: <span className="font-bold text-slate-700">{formatDate(order.planned_delivery_date)}</span>
-                </p>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-1.5 max-w-xl">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Состав заказа:</p>
-                  {order.items && order.items.map((item, idx) => (
-                    <div key={idx} className="text-xs text-slate-600 flex justify-between items-center gap-4 py-0.5">
-                      <span className="truncate">
-                        <span className="font-semibold text-slate-900">
-                          {item.product?.name || `Изделие ID: ${item.product_id}`}
-                        </span>
-                        {item.product?.sku && (
-                          <span className="text-[10px] text-slate-400 font-mono ml-1.5 bg-slate-200/60 px-1 py-0.5 rounded">
-                            {item.product.sku}
-                          </span>
-                        )}
+          orders.map((order) => {
+            const totalQty = (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            return (
+              <div
+                key={order.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleOpenOrder(order)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleOpenOrder(order);
+                  }
+                }}
+                className="w-full rounded-3xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-black text-slate-900">Заказ #{order.id}</h2>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${orderStatusClass(order.status)}`}>
+                        {statusLabels[order.status] || order.status}
                       </span>
-                      <span className="font-bold text-slate-800 shrink-0">{item.quantity} шт.</span>
                     </div>
-                  ))}
+                    <p className="mt-1 truncate text-sm font-semibold text-slate-700">{order.customer_name || "Заказчик не указан"}</p>
+                  </div>
+                  <div className="shrink-0 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                    {totalQty} шт.
+                  </div>
                 </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    <span className="block text-[10px] font-bold text-slate-400">Плановая поставка</span>
+                    <span className="font-semibold text-slate-700">{formatDate(order.planned_delivery_date)}</span>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    <span className="block text-[10px] font-bold text-slate-400">Позиций</span>
+                    <span className="font-semibold text-slate-700">{order.items?.length || 0}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                  <p className="mb-2 text-xs font-bold text-slate-700">Состав заказа</p>
+                  <div className="space-y-2">
+                    {(order.items || []).map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                        <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
+                          {item.product?.name || `Изделие ID: ${item.product_id}`}
+                          {(item.product?.drawing_number || item.product?.sku) && (
+                            <span className="mt-0.5 block truncate text-[10px] font-mono text-slate-400">
+                              {item.product?.drawing_number || item.product?.sku}
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-sm font-bold text-slate-700">{item.quantity} шт.</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+	                {(order.status === "In Progress" || order.status === "Reserved") && (
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        issueMaterials(order.id);
+                      }}
+                      disabled={loading}
+                      className={`${primaryButtonClass} w-full bg-indigo-600 border-indigo-600 hover:bg-indigo-700`}
+                    >
+                      {loading ? "Выдача..." : "Выдать материалы"}
+                    </button>
+                  </div>
+                )}
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 shrink-0 lg:w-52">
-                <button
-                  onClick={() => handleOpenOrder(order)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all text-center"
-                >
-                  Открыть заказ
-                </button>
-
-                <button
-                  onClick={() => handleOpenDetails(order)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all text-center border border-slate-200/60"
-                >
-                  Сводная комплектация
-                </button>
-
-                {(order.status === "In Progress" || order.status === "Reserved") && (
-                  <button
-                    onClick={() => issueMaterials(order.id)}
-                    disabled={loading}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all disabled:bg-slate-300"
-                  >
-	                    {loading ? "Выдача..." : "Выдать материалы"}
-	                  </button>
-	                )}
-
-                <button
-                  onClick={() => handleDeleteOrder(order)}
-                  disabled={loading}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all text-center border border-rose-100 disabled:opacity-50"
-                >
-                  Удалить
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         ) : (
-          !errorText && <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-white text-slate-400 font-medium">Заказов не найдено.</div>
+          !errorText && <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-400 xl:col-span-2">Заказов не найдено.</div>
         )}
       </div>
 
-      {isDetailsModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[30px] p-8 w-full max-w-3xl shadow-xl border border-slate-100 max-h-[85vh] flex flex-col">
-            <div className="flex justify-between items-start gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Сводная комплектация</h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Заказ #{activeOrder?.id} · {activeOrder?.customer_name || "Заказчик не указан"}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={downloadPDF}
-                  disabled={materialsLoading || requiredMaterials.length === 0}
-                  className="text-xs font-bold uppercase text-white bg-slate-900 hover:bg-slate-800 px-4 py-3 rounded-xl disabled:bg-slate-300"
-                >
-                  PDF
-                </button>
-                <button
-                  onClick={() => setIsDetailsModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-3"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      {/* ПАНЕЛЬ СОЗДАНИЯ ЗАКАЗА */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Закрыть создание заказа"
+            className="hidden flex-1 cursor-default md:block"
+            onClick={() => setIsModalOpen(false)}
+          />
+          <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+            <form onSubmit={handleCreateOrder} className="flex h-full flex-col bg-white">
+              <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400">Производство</p>
+                  <h2 className="mt-1 text-xl font-black text-slate-900">Новый заказ</h2>
+                  <p className="mt-2 text-sm text-slate-500">Заказчик, плановая поставка и изделия для запуска в производство.</p>
+                </div>
+                <button type="button" onClick={() => setIsModalOpen(false)} className={`${neutralButtonClass} shrink-0`}>
+                  Закрыть
                 </button>
               </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto border border-slate-100 rounded-xl bg-slate-50/50 p-4">
-              {materialsLoading ? (
-                <p className="text-center text-slate-400">Загрузка спецификации...</p>
-              ) : materialsError ? (
-                <p className="text-center text-red-600 text-sm">{materialsError}</p>
-              ) : requiredMaterials.length === 0 ? (
-                <p className="text-center text-slate-400">Комплектующие не найдены.</p>
-              ) : (
-                (() => {
-                  const grouped = requiredMaterials.reduce((acc, item) => {
-                    const device = item.device || "Готовое изделие";
-                    const assembly = item.assembly || "Основной состав";
-                    const category = item.category || "Прочее";
-                    if (!acc[device]) acc[device] = {};
-                    if (!acc[device][assembly]) acc[device][assembly] = {};
-                    if (!acc[device][assembly][category]) acc[device][assembly][category] = [];
-                    acc[device][assembly][category].push(item);
-                    return acc;
-                  }, {});
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+                <div className="flex flex-col gap-5">
+                  {createError && (
+                    <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+                      {createError}
+                    </div>
+                  )}
 
-                  return (
-                    <div className="space-y-4">
-                      {Object.entries(grouped).map(([device, assemblies]) => (
-                        <div key={device} className="border border-slate-200 rounded-xl p-4 bg-white">
-                          <h3 className="font-bold text-sm text-slate-900 border-b pb-2 mb-2">Устройство: {device}</h3>
-                          {Object.entries(assemblies).map(([assembly, categories]) => (
-                            <div key={assembly} className="ml-4 mt-2">
-                              <h4 className="font-semibold text-xs text-slate-700 italic">Сборочная единица: {assembly}</h4>
-                              {Object.entries(categories).map(([category, items]) => (
-                                <div key={category} className="ml-4 mt-1 mb-2">
-                                  <p className="text-[10px] font-bold uppercase text-slate-400">{category}</p>
-                                  <ul className="space-y-1">
-                                    {items.map((mat) => (
-                                      <li key={mat.id} className="text-xs text-slate-600 flex justify-between gap-4">
-                                        <span className="min-w-0">
-                                          <span className="font-semibold text-slate-800">{mat.name}</span>
-                                          <span className="block text-[10px] text-slate-400">
-                                            {mat.item_type === "purchased_product" ? "Покупное изделие/узел" :
-                                             mat.item_type === "unresolved_purchase" ? "Непривязанная позиция" :
-                                             "Покупной компонент"}
-                                            {mat.sku && mat.sku !== "—" ? ` · ${mat.sku}` : ""}
-                                            {mat.designators ? ` · ${mat.designators}` : ""}
-                                          </span>
-                                        </span>
-                                        <span className="font-bold shrink-0">{mat.qty} шт.</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ))}
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className={labelClass}>Заказчик *</label>
+                        <input
+                          type="text"
+                          required
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className={fieldClass}
+                          placeholder="ООО Вектор"
+                        />
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Плановая дата поставки</label>
+                        <CalendarField
+                          value={plannedDeliveryDate}
+                          onChange={setPlannedDeliveryDate}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">Изделия в заказе</p>
+                        <p className="mt-1 text-xs text-slate-500">Можно добавить несколько изделий в один производственный заказ.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddItemRow}
+                        className={`${primaryButtonClass} h-10 min-h-10 px-4`}
+                      >
+                        Добавить позицию
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {selectedItems.map((item, index) => (
+                        <div key={index} className="rounded-2xl border border-slate-100 bg-white p-3">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px_40px] sm:items-end">
+                            <div>
+                              <label className={labelClass}>Изделие *</label>
+                              <div className="relative">
+                                <select
+                                  required
+                                  value={item.product_id}
+                                  onChange={(e) => handleItemChange(index, "product_id", e.target.value)}
+                                  className={selectClass}
+                                >
+                                  {products.length === 0 ? (
+                                    <option value="">База изделий пуста</option>
+                                  ) : (
+                                    products.map((p) => (
+                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))
+                                  )}
+                                </select>
+                                <SelectChevron />
+                              </div>
                             </div>
-                          ))}
+
+                            <div>
+                              <label className={labelClass}>Кол-во *</label>
+                              <input
+                                type="number"
+                                min="1"
+                                required
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(index, "quantity", parseInt(e.target.value) || 1)}
+                                className={`${fieldClass} text-center font-semibold`}
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={selectedItems.length === 1}
+                              onClick={() => handleRemoveItemRow(index)}
+                              className={dangerButtonClass}
+                              title="Удалить позицию"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  );
-                })()
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ЗАКАЗА */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[30px] p-8 w-full max-w-xl shadow-xl border border-slate-100 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-slate-900">Новый комплексный заказ</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateOrder} className="space-y-6">
-              {/* Форма создания заказа остается без изменений */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">Наименование компании / заказчика *</label>
-                <input
-                  type="text"
-                  required
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full p-3.5 text-sm border border-slate-200 rounded-xl text-slate-800 font-semibold bg-slate-50 focus:outline-none focus:border-blue-500"
-                  placeholder="ООО 'Вектор' или Иван Иванов"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-2">Плановая дата поставки</label>
-                <input
-                  type="date"
-                  value={plannedDeliveryDate}
-                  onChange={(e) => setPlannedDeliveryDate(e.target.value)}
-                  className="w-full p-3.5 text-sm border border-slate-200 rounded-xl text-slate-800 font-semibold bg-slate-50 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 tracking-wider">Изделия в заказе *</label>
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    + Добавить позицию
-                  </button>
-                </div>
-
-                {selectedItems.map((item, index) => (
-                  <div key={index} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="flex-1">
-                      <select
-                        required
-                        value={item.product_id}
-                        onChange={(e) => handleItemChange(index, "product_id", e.target.value)}
-                        className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 font-semibold bg-white focus:outline-none"
-                      >
-                        {products.length === 0 ? (
-                          <option value="">Загрузка базы...</option>
-                        ) : (
-                          products.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))
-                        )}
-                      </select>
-                    </div>
-
-                    <div className="w-24">
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(index, "quantity", parseInt(e.target.value) || 1)}
-                        className="w-full p-2.5 text-xs border border-slate-200 rounded-lg text-slate-800 font-semibold bg-white text-center focus:outline-none"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={selectedItems.length === 1}
-                      onClick={() => handleRemoveItemRow(index)}
-                      className="text-slate-300 hover:text-red-500 disabled:opacity-30 transition-colors p-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
                   </div>
-                ))}
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={createLoading || products.length === 0}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-xl font-bold text-xs uppercase tracking-widest transition-all disabled:bg-slate-300 shadow-lg"
-              >
-                {createLoading ? "Обработка и резервирование..." : "Запустить комплексный заказ"}
-              </button>
+              <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+                <button
+                  type="submit"
+                  disabled={createLoading || products.length === 0}
+                  className={`${primaryButtonClass} w-full`}
+                >
+                  {createLoading ? "Запуск заказа..." : "Запустить заказ"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
