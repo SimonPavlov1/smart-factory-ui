@@ -74,7 +74,20 @@ function taskStatusClass(task) {
 }
 
 function canManageTasks(user) {
-  return ["admin", "manager"].includes(user?.role);
+  return userHasRole(user, ["admin", "manager"]);
+}
+
+function userRoles(user) {
+  const roles = Array.isArray(user?.roles) ? user.roles : [];
+  return roles.length ? roles : user?.role ? [user.role] : [];
+}
+
+function userHasRole(user, roles) {
+  return userRoles(user).some((role) => roles.includes(role));
+}
+
+function roleListLabel(user) {
+  return userRoles(user).map((role) => ROLE_LABELS[role] || role).join(", ");
 }
 
 function apiErrorMessage(data, fallback) {
@@ -195,7 +208,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       if (res.ok) setUsers(await res.json());
     };
     loadUsers();
-  }, [task?.id, task?.role, user?.role]);
+  }, [task?.id, task?.role, user?.role, JSON.stringify(user?.roles || [])]);
 
   const changePayload = (name, value) => {
     setCompletionPayload((current) => ({ ...current, [name]: value }));
@@ -378,7 +391,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const showComponentChecklist = ["procurement_purchase", "warehouse_receive_components"].includes(task.type);
   const deliveries = completionPayload.deliveries || [];
   const isAssignedToMe = task.assigned_user_id === user?.id;
-  const canTake = ["assigned", "open"].includes(task.status) && (isAssignedToMe || (!task.assigned_user_id && (task.role === user?.role || canManageTasks(user))));
+  const canTake = ["assigned", "open"].includes(task.status) && (isAssignedToMe || (!task.assigned_user_id && (userHasRole(user, [task.role]) || canManageTasks(user))));
   const canComplete = ["in_progress", "open"].includes(task.status) && (canManageTasks(user) || task.assigned_user_id === user?.id);
 
   return (
@@ -688,7 +701,7 @@ const Dashboard = ({ user, onOpenPage }) => {
       <div>
         <h1 className="text-3xl font-black text-slate-900">Панель</h1>
         <p className="text-sm text-slate-500 mt-2">
-          {user.full_name || user.username} · {ROLE_LABELS[user.role] || user.role}
+          {user.full_name || user.phone || "Пользователь"} · {roleListLabel(user)}
         </p>
       </div>
 
@@ -735,17 +748,17 @@ const Dashboard = ({ user, onOpenPage }) => {
 
 const AllApplications = ({ user, onOpenPage }) => (
   <TaskList
-    endpoint={["admin", "manager"].includes(user.role) ? "/api/tasks?status=all" : "/api/tasks/mine?status=all"}
+    endpoint={userHasRole(user, ["admin", "manager"]) ? "/api/tasks?status=all" : "/api/tasks/mine?status=all"}
     title="Все заявки"
     subtitle="Цепочка workflow-задач"
     user={user}
     onOpenPage={onOpenPage}
   />
 );
-const MyTasks = ({ user, onOpenPage }) => <TaskList endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${ROLE_LABELS[user.role] || user.role}: персональная очередь работ`} onOpenPage={onOpenPage} />;
+const MyTasks = ({ user, onOpenPage }) => <TaskList endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${roleListLabel(user)}: персональная очередь работ`} onOpenPage={onOpenPage} />;
 
 function LoginPage({ onLogin, theme, onToggleTheme }) {
-  const [username, setUsername] = useState("admin");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -759,7 +772,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ phone, password }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -783,14 +796,14 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-[28px] border border-slate-100 shadow-sm p-8 space-y-5">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Вход в MES</h1>
-          <p className="text-xs text-slate-400 mt-1">Введите учетные данные пользователя</p>
+          <p className="text-xs text-slate-400 mt-1">Введите телефон и пароль сотрудника</p>
         </div>
 
         {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
 
         <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Логин</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500" />
+          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Телефон</label>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500" />
         </div>
         <div>
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Пароль</label>
@@ -805,7 +818,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
           {theme === "dark" ? "Ночная тема" : "Дневная тема"}
         </button>
 
-        <p className="text-[11px] text-slate-400">Первичная dev-учетка: admin / admin123, если база пользователей пустая.</p>
+        <p className="text-[11px] text-slate-400">Для старой dev-учетки можно временно ввести admin в поле телефона.</p>
       </form>
     </div>
   );
@@ -813,86 +826,477 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
 
 function Personnel() {
   const [users, setUsers] = useState([]);
-  const [form, setForm] = useState({ username: "", password: "", full_name: "", role: "manager" });
+  const emptyForm = {
+    password: "",
+    last_name: "",
+    first_name: "",
+    middle_name: "",
+    phone: "",
+    role: "manager",
+    roles: ["manager"],
+  };
+  const [form, setForm] = useState({
+    password: "",
+    last_name: "",
+    first_name: "",
+    middle_name: "",
+    phone: "",
+    role: "manager",
+    roles: ["manager"],
+  });
+  const [drafts, setDrafts] = useState({});
+  const [passwords, setPasswords] = useState({});
+  const [panelMode, setPanelMode] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState("");
+  const [savingId, setSavingId] = useState(null);
 
   const fetchUsers = async () => {
     const res = await fetch("/api/admin/users");
-    if (res.ok) setUsers(await res.json());
+    if (res.ok) {
+      const data = await res.json();
+      setUsers(data);
+      setDrafts(Object.fromEntries(data.map((user) => [user.id, {
+        last_name: user.last_name || "",
+        first_name: user.first_name || "",
+        middle_name: user.middle_name || "",
+        phone: user.phone || "",
+        role: user.role,
+        roles: userRoles(user),
+        is_active: user.is_active,
+      }])));
+    }
   };
 
   useEffect(() => { fetchUsers(); }, []);
 
+  const fullName = (user) => {
+    const parts = [user.last_name, user.first_name, user.middle_name].filter(Boolean);
+    return parts.length ? parts.join(" ") : user.full_name || "ФИО не указано";
+  };
+
+  const initials = (user) => {
+    const first = (user.first_name || "").trim()[0];
+    const last = (user.last_name || "").trim()[0];
+    const fallback = (user.full_name || user.phone || user.username || "?").trim()[0];
+    return `${first || fallback || "?"}${last || ""}`.toUpperCase();
+  };
+
+  const UserAvatar = ({ user, size = "md" }) => (
+    <div className={`${size === "lg" ? "h-14 w-14 text-lg" : "h-12 w-12 text-base"} flex shrink-0 items-center justify-center rounded-full bg-[#3F8CFF] font-black text-white shadow-sm shadow-blue-500/20`}>
+      {initials(user)}
+    </div>
+  );
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredUsers = normalizedSearch
+    ? users.filter((user) => {
+      const text = [
+        fullName(user),
+        user.phone,
+        user.username,
+        user.id,
+        user.is_active ? "активен доступ включен" : "отключен доступ выключен",
+        roleListLabel(user),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return text.includes(normalizedSearch);
+    })
+    : users;
+
+  const updateDraft = (userId, patch) => {
+    setDrafts((current) => ({
+      ...current,
+      [userId]: { ...(current[userId] || {}), ...patch },
+    }));
+  };
+
+  const toggleRole = (currentRoles, role) => {
+    const roles = currentRoles.includes(role)
+      ? currentRoles.filter((item) => item !== role)
+      : [...currentRoles, role];
+    return roles.length ? roles : [role];
+  };
+
+  const openCreatePanel = () => {
+    setError("");
+    setForm({ ...emptyForm });
+    setSelectedUser(null);
+    setPanelMode("create");
+  };
+
+  const openUserPanel = (user) => {
+    setError("");
+    setSelectedUser(user);
+    updateDraft(user.id, {
+      last_name: user.last_name || "",
+      first_name: user.first_name || "",
+      middle_name: user.middle_name || "",
+      phone: user.phone || "",
+      role: user.role,
+      roles: userRoles(user),
+      is_active: user.is_active,
+    });
+    setPanelMode("edit");
+  };
+
+  const closePanel = () => {
+    setPanelMode(null);
+    setSelectedUser(null);
+    setError("");
+  };
+
   const createUser = async (e) => {
     e.preventDefault();
     setError("");
-    const username = form.username.trim();
-    const fullName = form.full_name.trim();
+    const lastName = form.last_name.trim();
+    const firstName = form.first_name.trim();
+    const middleName = form.middle_name.trim();
+    const phone = form.phone.trim();
 
-    if (username.length < 3) {
-      setError("Логин должен быть не короче 3 символов");
+    if (!phone) {
+      setError("Телефон обязателен");
       return;
     }
     if (form.password.length < 6) {
       setError("Пароль должен быть не короче 6 символов");
       return;
     }
+    if (!lastName || !firstName) {
+      setError("Фамилия и имя обязательны");
+      return;
+    }
 
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, username, full_name: fullName || null }),
+      body: JSON.stringify({
+        password: form.password,
+        last_name: lastName,
+        first_name: firstName,
+        middle_name: middleName || null,
+        phone: phone || null,
+        role: form.roles[0] || form.role,
+        roles: form.roles,
+      }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(apiErrorMessage(data, "Не удалось создать пользователя"));
       return;
     }
-    setForm({ username: "", password: "", full_name: "", role: "manager" });
-    fetchUsers();
+    setForm({ ...emptyForm });
+    await fetchUsers();
+    closePanel();
   };
 
   const updateUser = async (user, patch) => {
+    setError("");
+    setSavingId(user.id);
     const res = await fetch(`/api/admin/users/${user.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...user, ...patch, password: undefined }),
+      body: JSON.stringify({
+        last_name: patch.last_name ?? user.last_name ?? null,
+        first_name: patch.first_name ?? user.first_name ?? null,
+        middle_name: patch.middle_name ?? user.middle_name ?? null,
+        phone: patch.phone ?? user.phone ?? null,
+        role: (patch.roles || userRoles(user))[0] || patch.role || user.role,
+        roles: patch.roles || userRoles(user),
+        is_active: patch.is_active ?? user.is_active,
+      }),
     });
-    if (res.ok) fetchUsers();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(apiErrorMessage(data, "Не удалось обновить пользователя"));
+    } else {
+      await fetchUsers();
+      setSelectedUser((current) => current?.id === user.id ? { ...current, ...patch } : current);
+    }
+    setSavingId(null);
   };
 
+  const changePassword = async (user) => {
+    const password = (passwords[user.id] || "").trim();
+    if (password.length < 6) {
+      setError("Новый пароль должен быть не короче 6 символов");
+      return;
+    }
+    setError("");
+    setSavingId(user.id);
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        last_name: user.last_name || null,
+        first_name: user.first_name || null,
+        middle_name: user.middle_name || null,
+        phone: user.phone || null,
+        role: userRoles(user)[0] || user.role,
+        roles: userRoles(user),
+        is_active: user.is_active,
+        password,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(apiErrorMessage(data, "Не удалось сменить пароль"));
+    } else {
+      setPasswords((current) => ({ ...current, [user.id]: "" }));
+      await fetchUsers();
+    }
+    setSavingId(null);
+  };
+
+  const selectedDraft = selectedUser ? drafts[selectedUser.id] || {} : {};
+  const panel = panelMode && (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-label="Закрыть карточку сотрудника"
+        className="hidden flex-1 cursor-default md:block"
+        onClick={closePanel}
+      />
+      <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+        {panelMode === "create" ? (
+          <form onSubmit={createUser} className="flex h-full flex-col bg-white">
+            <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400">Персонал</p>
+                <h3 className="mt-1 text-xl font-black text-slate-900">Новый сотрудник</h3>
+                <p className="mt-2 text-sm text-slate-500">Телефон, пароль, роль и контактные данные.</p>
+              </div>
+              <button type="button" onClick={closePanel} className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all hover:-translate-y-0.5 hover:bg-slate-50">
+                Закрыть
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Фамилия *</label>
+                  <input required value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Имя *</label>
+                  <input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Отчество</label>
+                  <input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Телефон</label>
+                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+7..." className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Пароль *</label>
+                  <input required minLength={6} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Роли</label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {Object.entries(ROLE_LABELS).map(([role, label]) => (
+                      <label key={role} className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={form.roles.includes(role)}
+                          onChange={() => setForm((current) => {
+                            const roles = toggleRole(current.roles, role);
+                            return { ...current, roles, role: roles[0] };
+                          })}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+              <button className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md">
+                Создать сотрудника
+              </button>
+            </div>
+          </form>
+        ) : selectedUser && (
+          <form onSubmit={(e) => { e.preventDefault(); updateUser(selectedUser, selectedDraft); }} className="flex h-full flex-col bg-white">
+            <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+              <div className="flex min-w-0 items-center gap-4">
+                <UserAvatar user={selectedUser} size="lg" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-slate-400">Карточка сотрудника</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-900 break-words">{fullName(selectedUser)}</h3>
+                  <p className="mt-2 text-sm text-slate-500">{selectedUser.phone || "Телефон не указан"} · ID {selectedUser.id}</p>
+                </div>
+              </div>
+              <button type="button" onClick={closePanel} className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all hover:-translate-y-0.5 hover:bg-slate-50">
+                Закрыть
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+              <div className="flex flex-col gap-5">
+                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Фамилия</label>
+                      <input value={selectedDraft.last_name || ""} onChange={(e) => updateDraft(selectedUser.id, { last_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Имя</label>
+                      <input value={selectedDraft.first_name || ""} onChange={(e) => updateDraft(selectedUser.id, { first_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Отчество</label>
+                      <input value={selectedDraft.middle_name || ""} onChange={(e) => updateDraft(selectedUser.id, { middle_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Телефон</label>
+                      <input value={selectedDraft.phone || ""} onChange={(e) => updateDraft(selectedUser.id, { phone: e.target.value })} placeholder="+7..." className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Роли</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {Object.entries(ROLE_LABELS).map(([role, label]) => (
+                          <label key={role} className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={(selectedDraft.roles || userRoles(selectedUser)).includes(role)}
+                              onChange={() => {
+                                const roles = toggleRole(selectedDraft.roles || userRoles(selectedUser), role);
+                                updateDraft(selectedUser.id, { roles, role: roles[0] });
+                              }}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="flex min-h-11 items-center gap-3 self-end rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
+                      <input type="checkbox" checked={Boolean(selectedDraft.is_active)} onChange={(e) => updateDraft(selectedUser.id, { is_active: e.target.checked })} />
+                      Доступ включен
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                  <p className="text-sm font-bold text-slate-900">Пароль</p>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                    <input type="password" placeholder="Новый пароль" value={passwords[selectedUser.id] || ""} onChange={(e) => setPasswords((current) => ({ ...current, [selectedUser.id]: e.target.value }))} className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    <button type="button" onClick={() => changePassword(selectedUser)} disabled={savingId === selectedUser.id || !(passwords[selectedUser.id] || "").trim()} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all hover:-translate-y-0.5 hover:bg-slate-50 disabled:opacity-50">
+                      Сменить пароль
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+              <button type="submit" disabled={savingId === selectedUser.id} className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md disabled:opacity-50">
+                {savingId === selectedUser.id ? "Сохранение..." : "Сохранить данные"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="p-10 space-y-6">
-      <h1 className="text-2xl font-black text-slate-900">Пользователи и роли</h1>
-
-      <form onSubmit={createUser} className="bg-white border border-slate-100 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-5 gap-3">
-        <input required minLength={3} placeholder="Логин" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="p-3 border rounded-xl text-sm" />
-        <input required minLength={6} placeholder="Пароль от 6 символов" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="p-3 border rounded-xl text-sm" />
-        <input placeholder="Имя" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="p-3 border rounded-xl text-sm" />
-        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="p-3 border rounded-xl text-sm">
-          {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
-        </select>
-        <button className="bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Создать</button>
-      </form>
-
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
-
-      <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
-        {users.map((user) => (
-          <div key={user.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center p-4 border-b last:border-b-0">
-            <div className="font-bold text-sm">{user.username}</div>
-            <div className="text-sm text-slate-500">{user.full_name || "—"}</div>
-            <select value={user.role} onChange={(e) => updateUser(user, { role: e.target.value })} className="p-2 border rounded-lg text-sm">
-              {Object.entries(ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
-            </select>
-            <label className="text-sm flex items-center gap-2">
-              <input type="checkbox" checked={user.is_active} onChange={(e) => updateUser(user, { is_active: e.target.checked })} />
-              Активен
-            </label>
-            <div className="text-xs text-slate-400">ID {user.id}</div>
+    <div className="p-4 sm:p-6 lg:p-10 space-y-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold text-slate-400">Администрирование</p>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-black text-slate-900">Персонал</h1>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm">
+            {filteredUsers.length} из {users.length}
           </div>
+          <button type="button" onClick={openCreatePanel} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md">
+            Добавить сотрудника
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-2xl p-4">{error}</div>}
+
+      <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+        <label className="block text-[11px] font-bold text-slate-500 mb-2">Поиск по сотрудникам</label>
+        <div className="relative">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ФИО, телефон, роль, статус или ID"
+            className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 pr-11 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
+              aria-label="Очистить поиск"
+            >
+              ×
+            </button>
+          ) : (
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {filteredUsers.map((user) => (
+            <button key={user.id} type="button" onClick={() => openUserPanel(user)} className="rounded-3xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <UserAvatar user={user} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-lg font-black text-slate-900">{fullName(user)}</h3>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${user.is_active ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+                        {user.is_active ? "Активен" : "Отключен"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-mono text-slate-400">{user.phone || "Телефон не указан"} · ID {user.id}</p>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                  {roleListLabel(user)}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-slate-500 sm:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                  <span className="block text-[10px] font-bold text-slate-400">Телефон</span>
+                  <span className="font-semibold text-slate-700">{user.phone || "Не указан"}</span>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                  <span className="block text-[10px] font-bold text-slate-400">Доступ</span>
+                  <span className="font-semibold text-slate-700">{user.is_active ? "Включен" : "Отключен"}</span>
+                </div>
+              </div>
+            </button>
         ))}
       </div>
+
+      {filteredUsers.length === 0 && (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-400">
+          Сотрудники не найдены
+        </div>
+      )}
+
+      {panel}
     </div>
   );
 }
@@ -938,12 +1342,12 @@ export default function App() {
 
   const canOpen = (page) => {
     if (!user) return false;
-    if (user.role === "admin") return true;
+    if (userHasRole(user, ["admin"])) return true;
     if (page === "Персонал") return false;
     if (["Панель", "Все заявки", "Мои задачи"].includes(page)) return true;
-    if (page === "База изделий") return ["engineer", "manager", "production", "assembler", "tester", "repair_engineer"].includes(user.role);
-    if (page === "Склад ТМЦ") return ["warehouse", "manager", "engineer", "procurement", "packer"].includes(user.role);
-    if (page === "Производство") return ["warehouse", "manager", "production", "assembler", "tester", "repair_engineer", "packer", "procurement"].includes(user.role);
+    if (page === "База изделий") return userHasRole(user, ["engineer", "manager", "production", "assembler", "tester", "repair_engineer"]);
+    if (page === "Склад ТМЦ") return userHasRole(user, ["warehouse", "manager", "engineer", "procurement", "packer"]);
+    if (page === "Производство") return userHasRole(user, ["warehouse", "manager", "production", "assembler", "tester", "repair_engineer", "packer", "procurement"]);
     return true;
   };
 

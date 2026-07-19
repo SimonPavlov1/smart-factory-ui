@@ -22,6 +22,11 @@ const buttonStyles = {
   iconDanger: "inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-50 text-rose-500 hover:text-rose-700 border border-rose-100 hover:border-rose-200 transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0",
 };
 
+function userHasRole(user, roles) {
+  const userRoles = Array.isArray(user?.roles) && user.roles.length ? user.roles : user?.role ? [user.role] : [];
+  return userRoles.some((role) => roles.includes(role));
+}
+
 export default function InventoryBase({ user }) {
   const [components, setComponents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,7 +102,7 @@ export default function InventoryBase({ user }) {
     }, {});
 
   const categories = [...new Set(components.map(c => c.category || "Без категории"))];
-  const canEditInventory = ["admin", "warehouse"].includes(user?.role);
+  const canEditInventory = userHasRole(user, ["admin", "warehouse"]);
   const visibleCount = Object.values(groupedComponents).reduce((sum, items) => sum + items.length, 0);
   const categoryFilterLabel = selectedCategories.length === 0
     ? "Все категории"

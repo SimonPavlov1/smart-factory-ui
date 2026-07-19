@@ -81,7 +81,7 @@ const ROLE_LABELS = {
 };
 
 export default function Sidebar({ activePage, setActivePage, user, onLogout, canOpen, theme = "light", onToggleTheme }) {
-  const menuItems = [
+const menuItems = [
     { id: 'Панель', icon: Icons.Panel },
     { id: 'Все заявки', icon: Icons.Applications },
     { id: 'Мои задачи', icon: Icons.Tasks },
@@ -89,7 +89,12 @@ export default function Sidebar({ activePage, setActivePage, user, onLogout, can
     { id: 'База изделий', icon: Icons.Gadgets },
     { id: 'Склад ТМЦ', icon: Icons.Warehouse },
     { id: 'Производство', icon: Icons.Tasks },
-  ];
+];
+
+function roleListLabel(user) {
+  const roles = Array.isArray(user?.roles) && user.roles.length ? user.roles : user?.role ? [user.role] : [];
+  return roles.map((role) => ROLE_LABELS[role] || role).join(", ");
+}
 
   return (
     <aside className="glass-sidebar w-80 shrink-0 flex flex-col p-6 xl:p-8 rounded-[28px] xl:rounded-[35px] relative lg:h-full max-lg:w-full max-lg:p-3 max-lg:rounded-[24px]">
@@ -150,7 +155,7 @@ export default function Sidebar({ activePage, setActivePage, user, onLogout, can
           </div>
           <div className="min-w-0">
             <div className="font-medium">Выход</div>
-            {user && <div className="text-[10px] text-slate-400 truncate">{user.username} · {ROLE_LABELS[user.role] || user.role}</div>}
+            {user && <div className="text-[10px] text-slate-400 truncate">{user.phone || user.full_name || "Пользователь"} · {roleListLabel(user)}</div>}
           </div>
         </div>
       </div>
