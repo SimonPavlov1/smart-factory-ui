@@ -90,6 +90,19 @@ function roleListLabel(user) {
   return userRoles(user).map((role) => ROLE_LABELS[role] || role).join(", ");
 }
 
+function normalizePhoneInput(value) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+7${digits}`;
+  if (digits.length === 11 && digits.startsWith("8")) return `+7${digits.slice(1)}`;
+  if (digits.length === 11 && digits.startsWith("7")) return `+${digits}`;
+  return value;
+}
+
+function defaultPhoneInput(value) {
+  return value.trim() ? normalizePhoneInput(value) : "+7";
+}
+
 function apiErrorMessage(data, fallback) {
   if (typeof data.detail === "string") return data.detail;
   if (Array.isArray(data.detail)) {
@@ -758,7 +771,7 @@ const AllApplications = ({ user, onOpenPage }) => (
 const MyTasks = ({ user, onOpenPage }) => <TaskList endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${roleListLabel(user)}: персональная очередь работ`} onOpenPage={onOpenPage} />;
 
 function LoginPage({ onLogin, theme, onToggleTheme }) {
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+7");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -772,7 +785,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ phone: normalizePhoneInput(phone), password }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -803,7 +816,13 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
 
         <div>
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Телефон</label>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7..." className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500" />
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={(e) => setPhone(defaultPhoneInput(e.target.value))}
+            placeholder="9001234567"
+            className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+          />
         </div>
         <div>
           <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Пароль</label>
@@ -831,7 +850,7 @@ function Personnel({ currentUser }) {
     last_name: "",
     first_name: "",
     middle_name: "",
-    phone: "",
+    phone: "+7",
     role: "manager",
     roles: ["manager"],
   };
@@ -840,7 +859,7 @@ function Personnel({ currentUser }) {
     last_name: "",
     first_name: "",
     middle_name: "",
-    phone: "",
+    phone: "+7",
     role: "manager",
     roles: ["manager"],
   });
@@ -952,7 +971,7 @@ function Personnel({ currentUser }) {
     const lastName = form.last_name.trim();
     const firstName = form.first_name.trim();
     const middleName = form.middle_name.trim();
-    const phone = form.phone.trim();
+    const phone = normalizePhoneInput(form.phone).trim();
 
     if (!phone) {
       setError("Телефон обязателен");
@@ -1000,7 +1019,7 @@ function Personnel({ currentUser }) {
         last_name: patch.last_name ?? user.last_name ?? null,
         first_name: patch.first_name ?? user.first_name ?? null,
         middle_name: patch.middle_name ?? user.middle_name ?? null,
-        phone: patch.phone ?? user.phone ?? null,
+        phone: normalizePhoneInput(patch.phone ?? user.phone ?? ""),
         role: (patch.roles || userRoles(user))[0] || patch.role || user.role,
         roles: patch.roles || userRoles(user),
         is_active: patch.is_active ?? user.is_active,
@@ -1107,7 +1126,13 @@ function Personnel({ currentUser }) {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-2">Телефон</label>
-                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+7..." className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                  <input
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    onBlur={(e) => setForm({ ...form, phone: defaultPhoneInput(e.target.value) })}
+                    placeholder="9001234567"
+                    className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                  />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-2">Пароль *</label>
@@ -1174,7 +1199,13 @@ function Personnel({ currentUser }) {
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-500 mb-2">Телефон</label>
-                      <input value={selectedDraft.phone || ""} onChange={(e) => updateDraft(selectedUser.id, { phone: e.target.value })} placeholder="+7..." className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                      <input
+                        value={selectedDraft.phone || ""}
+                        onChange={(e) => updateDraft(selectedUser.id, { phone: e.target.value })}
+                        onBlur={(e) => updateDraft(selectedUser.id, { phone: defaultPhoneInput(e.target.value) })}
+                        placeholder="9001234567"
+                        className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                      />
                     </div>
                   </div>
                 </div>
