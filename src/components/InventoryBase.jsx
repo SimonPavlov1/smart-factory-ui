@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import InventoryForm from "./InventoryForm";
 
 // Иконки
@@ -30,7 +30,12 @@ function userHasRole(user, roles) {
 export default function InventoryBase({ user }) {
   const [components, setComponents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [categories, setCategories] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingComponent, setEditingComponent] = useState(null);
@@ -40,18 +45,76 @@ export default function InventoryBase({ user }) {
   const [editingQtyId, setEditingQtyId] = useState(null);
   const [tempQty, setTempQty] = useState("");
   const categoryFilterRef = useRef(null);
+  const loadMoreRef = useRef(null);
+  const activeRequestRef = useRef(null);
+  const hasMoreRef = useRef(true);
 
-  const fetchComponents = async (searchStr = "") => {
-    let url = "/api/inventory/components";
-    if (searchStr.trim()) url += `?search=${encodeURIComponent(searchStr.trim())}`;
-    const res = await fetch(url);
-    if (res.ok) setComponents(await res.json());
-  };
+  const fetchComponents = useCallback(async ({ reset = false, cursor = null } = {}) => {
+    if (!reset && (!hasMoreRef.current || activeRequestRef.current)) return;
+    if (reset && activeRequestRef.current) activeRequestRef.current.abort();
+
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
+    setListLoading(true);
+    const params = new URLSearchParams({ limit: "100" });
+    const searchStr = appliedSearch.trim();
+    if (searchStr.trim()) params.set("search", searchStr.trim());
+    if (!reset && cursor) params.set("after_id", String(cursor));
+    selectedCategories.forEach((category) => params.append("categories", category));
+
+    try {
+      const res = await fetch(`/api/inventory/components/page?${params.toString()}`, { signal: controller.signal });
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      setComponents((current) => reset ? items : [...current, ...items]);
+      setNextCursor(data.next_cursor ?? null);
+      hasMoreRef.current = Boolean(data.has_more);
+      setHasMore(hasMoreRef.current);
+    } catch (error) {
+      if (error.name !== "AbortError") console.error(error);
+    } finally {
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null;
+        setListLoading(false);
+      }
+    }
+  }, [appliedSearch, selectedCategories]);
 
   useEffect(() => {
-    const timer = setTimeout(() => fetchComponents(searchQuery), 350);
+    const timer = setTimeout(() => setAppliedSearch(searchQuery), 350);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchComponents({ reset: true }), 0);
+    return () => {
+      clearTimeout(timer);
+      activeRequestRef.current?.abort();
+    };
+  }, [fetchComponents]);
+
+  useEffect(() => {
+    fetch("/api/inventory/components/categories")
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setCategories(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !listLoading && nextCursor) {
+          fetchComponents({ cursor: nextCursor });
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchComponents, hasMore, listLoading, nextCursor]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -66,18 +129,18 @@ export default function InventoryBase({ user }) {
   const handleDelete = async (id) => {
     if (!window.confirm("Удалить позицию?")) return;
     const res = await fetch(`/api/inventory/components/${id}`, { method: "DELETE" });
-    if (res.ok) fetchComponents(searchQuery);
+    if (res.ok) fetchComponents({ reset: true });
   };
 
   const handleUpdateQty = async (id, val) => {
     const res = await fetch(`/api/inventory/components/${id}/quantity?new_quantity=${val}`, { method: "PATCH" });
-    if (res.ok) { setEditingQtyId(null); fetchComponents(searchQuery); }
+    if (res.ok) { setEditingQtyId(null); fetchComponents({ reset: true }); }
   };
 
   const handleIncomingSubmit = async (e, id) => {
     e.preventDefault();
     const res = await fetch(`/api/inventory/incoming?component_id=${id}&quantity=${incomingQty}`, { method: "POST" });
-    if (res.ok) { setIncomingCompId(null); setIncomingQty(""); fetchComponents(searchQuery); }
+    if (res.ok) { setIncomingCompId(null); setIncomingQty(""); fetchComponents({ reset: true }); }
   };
 
   const openEditForm = (component = null) => {
@@ -101,7 +164,6 @@ export default function InventoryBase({ user }) {
       return acc;
     }, {});
 
-  const categories = [...new Set(components.map(c => c.category || "Без категории"))];
   const canEditInventory = userHasRole(user, ["admin", "warehouse"]);
   const visibleCount = Object.values(groupedComponents).reduce((sum, items) => sum + items.length, 0);
   const categoryFilterLabel = selectedCategories.length === 0
@@ -125,7 +187,9 @@ export default function InventoryBase({ user }) {
           <div>
             <p className="text-[11px] font-bold text-slate-400">Склад</p>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">Склад ТМЦ</h1>
-            <p className="text-sm text-slate-500 mt-2">Показано {visibleCount} из {components.length} позиций.</p>
+            <p className="text-sm text-slate-500 mt-2">
+              Загружено {visibleCount} позиций{hasMore ? " — остальные подгрузятся при прокрутке" : ""}.
+            </p>
           </div>
           {canEditInventory && (
             <button onClick={() => openEditForm(null)} className={`${buttonStyles.primary} w-full sm:w-auto h-10 px-5`}>
@@ -279,6 +343,16 @@ export default function InventoryBase({ user }) {
         </div>
       ))}
 
+      <div ref={loadMoreRef} className="flex min-h-16 items-center justify-center py-4">
+        {listLoading && <span className="text-sm font-semibold text-slate-400">Загрузка позиций…</span>}
+        {!listLoading && !hasMore && components.length > 0 && (
+          <span className="text-sm font-semibold text-slate-300">Все позиции загружены</span>
+        )}
+        {!listLoading && components.length === 0 && (
+          <span className="text-sm font-semibold text-slate-400">Позиции не найдены</span>
+        )}
+      </div>
+
       {selectedComponent && !showForm && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
           <button
@@ -371,7 +445,7 @@ export default function InventoryBase({ user }) {
               initialData={editingComponent}
               panel
               onBack={closeSidePanel}
-              onSuccess={() => { closeSidePanel(); fetchComponents(searchQuery); }}
+              onSuccess={() => { closeSidePanel(); fetchComponents({ reset: true }); }}
             />
           </div>
         </div>
