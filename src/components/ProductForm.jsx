@@ -22,6 +22,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
   const [name, setName] = useState("");
   const [drawingNumber, setDrawingNumber] = useState("");
   const [revision, setRevision] = useState("1.0");
+  const [testChecklist, setTestChecklist] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const isEditMode = !!(initialData && initialData.id);
@@ -39,8 +40,26 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
       setName(initialData.name || "");
       setDrawingNumber(initialData.drawing_number || "");
       setRevision(initialData.revision || initialData.version || "1.0");
+      setTestChecklist((initialData.test_checklist || []).map((item) => typeof item === "string" ? item : item.label || ""));
+    } else {
+      setName("");
+      setDrawingNumber("");
+      setRevision("1.0");
+      setTestChecklist([]);
     }
   }, [initialData, isEditMode]);
+
+  const addChecklistItem = () => {
+    setTestChecklist((current) => [...current, ""]);
+  };
+
+  const changeChecklistItem = (index, value) => {
+    setTestChecklist((current) => current.map((item, itemIndex) => itemIndex === index ? value : item));
+  };
+
+  const removeChecklistItem = (index) => {
+    setTestChecklist((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,12 +71,14 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
             name: name.trim(),
             drawing_number: drawingNumber.trim() || null,
             revision: revision.trim() || "1.0",
+            test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
           }
         : {
             name: name.trim(),
             drawing_number: drawingNumber.trim() || `DEV-${Date.now()}`,
             version: revision.trim() || "1.0",
             is_final: !isSubAssemblyUnit,
+            test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
             components: [],
           };
 
@@ -173,6 +194,48 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6 border-b border-slate-100">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Чеклист тестирования</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Эти пункты попадут в задачу тестировщика для этого изделия.</p>
+              </div>
+              <button
+                type="button"
+                onClick={addChecklistItem}
+                className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 px-4 text-xs font-black text-blue-700 hover:bg-blue-100"
+              >
+                Добавить пункт
+              </button>
+            </div>
+            <div className="space-y-2">
+              {testChecklist.length === 0 && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-400">
+                  Чеклист пока не задан.
+                </div>
+              )}
+              {testChecklist.map((item, index) => (
+                <div key={index} className="grid grid-cols-[32px_minmax(0,1fr)_90px] gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
+                  <div className="flex h-10 items-center justify-center rounded-xl bg-white text-xs font-black text-slate-400">{index + 1}</div>
+                  <input
+                    type="text"
+                    value={item}
+                    onChange={(e) => changeChecklistItem(index, e.target.value)}
+                    placeholder="Например: проверка питания 24В"
+                    className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeChecklistItem(index)}
+                    className="rounded-xl border border-red-100 bg-white text-xs font-black text-red-600 hover:bg-red-50"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 

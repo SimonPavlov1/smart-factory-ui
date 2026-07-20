@@ -1118,6 +1118,36 @@ export default function GadgetsBase() {
         <ProductFilesPanel product={viewingProduct} onChanged={fetchProducts} />
 
         <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Чеклист тестирования</h3>
+              <p className="mt-1 text-sm text-slate-500">Пункты, которые попадут в задачу тестировщика для этого изделия.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEditingProduct(true)}
+              className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-4 text-sm font-semibold text-white hover:bg-[#1f78ff]"
+            >
+              Редактировать
+            </button>
+          </div>
+          {(viewingProduct.test_checklist || []).length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {(viewingProduct.test_checklist || []).map((item, index) => (
+                <div key={`${item}-${index}`} className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 text-sm font-semibold text-slate-700">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-black text-blue-600">{index + 1}</span>
+                  <span className="min-w-0 break-words">{typeof item === "string" ? item : item.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-400">
+              Чеклист тестирования для этого изделия еще не задан.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
               <div className="min-w-0">

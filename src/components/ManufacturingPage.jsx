@@ -191,6 +191,7 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
     done: "Выполнено",
     open: "Открыто",
     waiting_delivery: "Ожидание поставки",
+    hold: "На холде",
   };
 
   const roleLabels = {
@@ -562,24 +563,6 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
     }
   };
 
-  const issueMaterials = async (orderId) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/manufacturing/orders/${orderId}/issue-materials`, { method: "POST" });
-      if (res.ok) {
-        alert("Материалы по всем позициям успешно выданы!");
-        await fetchOrders();
-      } else {
-        const err = await res.json();
-        alert(`Ошибка: ${err.detail}`);
-      }
-    } catch (err) {
-      alert("Ошибка сети");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const inputDate = (value) => {
     if (!value) return "";
     const datePart = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
@@ -611,7 +594,7 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
   const stageClassName = (status) => {
     if (status === "done") return "border-emerald-200 bg-emerald-50 text-emerald-700";
     if (status === "in_progress") return "border-blue-200 bg-blue-50 text-blue-700";
-    if (status === "assigned" || status === "open" || status === "waiting_delivery") return "border-amber-200 bg-amber-50 text-amber-700";
+    if (status === "assigned" || status === "open" || status === "waiting_delivery" || status === "hold") return "border-amber-200 bg-amber-50 text-amber-700";
     return "border-slate-200 bg-slate-50 text-slate-400";
   };
 
@@ -627,7 +610,7 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
 
   const getCurrentStage = (detail) => {
     const stages = detail?.stages || [];
-    return stages.find((stage) => ["in_progress", "assigned", "open", "waiting_delivery"].includes(stage.status)) ||
+    return stages.find((stage) => ["in_progress", "assigned", "open", "waiting_delivery", "hold"].includes(stage.status)) ||
       stages.find((stage) => stage.status !== "done" && stage.status !== "not_created") ||
       stages.find((stage) => stage.status === "not_created") ||
       stages[stages.length - 1];
@@ -1112,21 +1095,6 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
                     ))}
                   </div>
                 </div>
-
-	                {(order.status === "In Progress" || order.status === "Reserved") && (
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        issueMaterials(order.id);
-                      }}
-                      disabled={loading}
-                      className={`${primaryButtonClass} w-full bg-indigo-600 border-indigo-600 hover:bg-indigo-700`}
-                    >
-                      {loading ? "Выдача..." : "Выдать материалы"}
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })

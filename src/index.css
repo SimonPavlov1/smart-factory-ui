@@ -210,6 +210,16 @@ textarea {
   border-color: rgba(0, 122, 255, 0.24);
 }
 
+.kanban-board {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+}
+
+.kanban-board::-webkit-scrollbar {
+  display: none;
+}
+
 .glass-sidebar {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
