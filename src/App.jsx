@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import GadgetsBase from "./components/GadgetsBase.jsx";
 import InventoryBase from "./components/InventoryBase.jsx";
+import FinishedGoodsBase from "./components/FinishedGoodsBase.jsx";
 import ManufacturingPage from "./components/ManufacturingPage";
 import { clearToken, getToken, installAuthFetch, setToken } from "./api";
 import "./index.css";
@@ -117,15 +118,15 @@ function apiErrorMessage(data, fallback) {
 function defaultCompletionPayload(task) {
   if (task.type === "procurement_purchase") {
     return {
+      invoice: "",
+      expected_date: "",
+      supplier: "",
+      comment: "",
+      invoice_file: null,
+      invoice_file_name: "",
       deliveries: (task.payload?.shortages || []).map((item) => ({
         component_id: item.component_id,
         qty: "",
-        expected_date: "",
-        invoice: "",
-        invoice_file: null,
-        invoice_file_name: "",
-        supplier: "",
-        comment: "",
       })),
     };
   }
@@ -246,23 +247,6 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     });
   };
 
-  const addDelivery = (componentId) => {
-    setCompletionPayload((current) => ({
-      ...current,
-      deliveries: [
-        ...(current.deliveries || []),
-        { component_id: componentId, qty: "", expected_date: "", invoice: "", invoice_file: null, invoice_file_name: "", supplier: "", comment: "" },
-      ],
-    }));
-  };
-
-  const removeDelivery = (index) => {
-    setCompletionPayload((current) => ({
-      ...current,
-      deliveries: (current.deliveries || []).filter((_, itemIndex) => itemIndex !== index),
-    }));
-  };
-
   const addNote = async () => {
     if (!note.trim()) return;
     const res = await fetch(`/api/tasks/${taskId}/notes`, {
@@ -312,30 +296,6 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     load();
   };
 
-  const addPurchase = async (delivery) => {
-    setError("");
-    const qty = Number(delivery.qty || 0);
-    if (!qty) {
-      setError("Укажите количество закупки");
-      return;
-    }
-
-    const { invoice_file, invoice_file_name, ...purchasePayload } = delivery;
-    const res = await fetch(`/api/tasks/${taskId}/procurement-purchases`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...purchasePayload, qty }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.detail || "Не удалось добавить закупку");
-      return;
-    }
-    if (invoice_file) await uploadFile(invoice_file);
-    onChanged();
-    load();
-  };
-
   const downloadFile = async (file) => {
     const res = await fetch(`/api${file.url}`);
     if (!res.ok) return;
@@ -350,10 +310,31 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     window.URL.revokeObjectURL(url);
   };
 
+  const downloadMaterialForm = async () => {
+    const res = await fetch(`/api/tasks/${taskId}/form.xlsx`);
+    if (!res.ok) {
+      setError("Не удалось сформировать Excel-форму");
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const action = task.type === "warehouse_issue_materials" ? "Выдача" : "Получение";
+    link.href = url;
+    link.download = `${action} комплектующих заказ ${task.order_id}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   const complete = async () => {
     setLoading(true);
     setError("");
     const numericPayload = { ...completionPayload };
+    const invoiceFile = numericPayload.invoice_file;
+    delete numericPayload.invoice_file;
+    delete numericPayload.invoice_file_name;
     ["assembled_qty", "passed_qty", "defective_qty", "packed_qty"].forEach((key) => {
       if (numericPayload[key] !== undefined && numericPayload[key] !== "") numericPayload[key] = Number(numericPayload[key]);
     });
@@ -364,8 +345,25 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     }
     if (Array.isArray(numericPayload.deliveries)) {
       numericPayload.deliveries = numericPayload.deliveries
-        .map((item) => ({ ...item, qty: Number(item.qty || 0) }))
+        .map((item) => ({
+          ...item,
+          qty: Number(item.qty || 0),
+          invoice: numericPayload.invoice,
+          expected_date: numericPayload.expected_date,
+          supplier: numericPayload.supplier,
+          comment: numericPayload.comment,
+        }))
         .filter((item) => item.qty > 0);
+    }
+    if (task.type === "procurement_purchase" && numericPayload.deliveries.length === 0) {
+      setLoading(false);
+      setError("Укажите количество хотя бы для одной позиции счета");
+      return;
+    }
+    if (task.type === "procurement_purchase" && !numericPayload.invoice?.trim() && !invoiceFile) {
+      setLoading(false);
+      setError("Укажите номер счета или приложите файл счета");
+      return;
     }
 
     const res = await fetch(`/api/tasks/${taskId}/complete`, {
@@ -376,6 +374,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     setLoading(false);
     if (res.ok) {
       const data = await res.json();
+      if (invoiceFile) await uploadFile(invoiceFile);
       onChanged();
       if (data.result?.status === "partial") {
         load();
@@ -400,7 +399,15 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const notes = task.payload?.notes || [];
   const shortages = task.payload?.shortages || [];
   const purchases = task.payload?.purchases || [];
-  const lineLabel = task.type === "procurement_purchase" ? "Закупить" : "Принять";
+  const orderedItems = task.payload?.ordered_items || (task.type === "warehouse_receive_components" ? shortages : []);
+  const receiptHistory = task.payload?.receipt_history || [];
+  const transferMaterials = task.payload?.materials || [];
+  const receivedByComponent = receiptHistory.reduce((result, entry) => {
+    (entry.items || []).forEach((item) => {
+      result[item.component_id] = (result[item.component_id] || 0) + Number(item.qty || 0);
+    });
+    return result;
+  }, {});
   const showComponentChecklist = ["procurement_purchase", "warehouse_receive_components"].includes(task.type);
   const deliveries = completionPayload.deliveries || [];
   const isAssignedToMe = task.assigned_user_id === user?.id;
@@ -478,11 +485,143 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             </section>
           )}
 
-          {shortages.length > 0 && (
+          {["warehouse_issue_materials", "assembler_receive_materials"].includes(task.type) && transferMaterials.length > 0 && (
+            <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-blue-700">
+                    {task.type === "warehouse_issue_materials" ? "Список на выдачу" : "Список на получение"}
+                  </h3>
+                  <p className="mt-1 text-xs font-semibold text-blue-600">Заказ №{task.order_id} · {transferMaterials.length} поз.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadMaterialForm}
+                  className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  Скачать Excel
+                </button>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-blue-100 bg-white">
+                <table className="w-full min-w-[620px] text-left text-xs">
+                  <thead className="bg-blue-50 text-blue-700">
+                    <tr>
+                      <th className="px-3 py-2.5 font-black">№</th>
+                      <th className="px-3 py-2.5 font-black">Комплектующее</th>
+                      <th className="px-3 py-2.5 font-black">Артикул</th>
+                      <th className="px-3 py-2.5 text-right font-black">Количество</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transferMaterials.map((material, index) => (
+                      <tr key={`${material.component_id}-${index}`} className="border-t border-blue-50 text-slate-700">
+                        <td className="px-3 py-3 text-slate-400">{index + 1}</td>
+                        <td className="px-3 py-3 font-semibold">{material.component_name || `Компонент ID ${material.component_id}`}</td>
+                        <td className="px-3 py-3 font-mono text-slate-500">{material.part_number || "—"}</td>
+                        <td className="px-3 py-3 text-right font-black">{material.qty || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {task.type === "warehouse_receive_components" && orderedItems.length > 0 && (
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-xs font-black uppercase tracking-widest text-emerald-700">Приёмка поставки</h3>
+                <span className="text-xs font-semibold text-emerald-600">Приёмок: {receiptHistory.length}</span>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-emerald-100 bg-white">
+                <table className="w-full min-w-[720px] text-left text-xs">
+                  <thead className="bg-emerald-50 text-emerald-700">
+                    <tr>
+                      <th className="px-3 py-2.5 font-black">Комплектующее</th>
+                      <th className="px-3 py-2.5 text-right font-black">Заказано</th>
+                      <th className="px-3 py-2.5 text-right font-black">Принято</th>
+                      <th className="px-3 py-2.5 text-right font-black">Осталось</th>
+                      {task.status !== "done" && <th className="px-3 py-2.5 text-right font-black">Принять сейчас</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderedItems.map((item) => {
+                      const orderedQty = Number(item.shortage_qty || item.qty || 0);
+                      const receivedQty = Number(receivedByComponent[item.component_id] || 0);
+                      const remainingLine = shortages.find((line) => line.component_id === item.component_id);
+                      const remainingQty = Number(remainingLine?.shortage_qty || remainingLine?.qty || Math.max(orderedQty - receivedQty, 0));
+                      const receivingLine = (completionPayload.items || []).find((line) => line.component_id === item.component_id);
+                      return (
+                        <tr key={item.component_id} className="border-t border-emerald-50 text-slate-700">
+                          <td className="px-3 py-3 font-semibold">{componentTitle(item)}</td>
+                          <td className="px-3 py-3 text-right font-bold">{orderedQty}</td>
+                          <td className="px-3 py-3 text-right font-bold text-emerald-700">{receivedQty}</td>
+                          <td className="px-3 py-3 text-right font-bold text-amber-700">{remainingQty}</td>
+                          {task.status !== "done" && (
+                            <td className="px-3 py-2 text-right">
+                              {remainingQty > 0 && receivingLine ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={remainingQty}
+                                  value={receivingLine.qty || ""}
+                                  onChange={(e) => changeLineQty(item.component_id, e.target.value)}
+                                  className="ml-auto w-24 rounded-lg border border-emerald-100 p-2 text-right text-sm font-semibold outline-none focus:border-emerald-400"
+                                />
+                              ) : "—"}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {receiptHistory.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {receiptHistory.map((entry, index) => (
+                    <p key={`${entry.received_at}-${index}`} className="text-xs font-semibold text-emerald-700">
+                      Приёмка {index + 1}: {(entry.items || []).reduce((sum, item) => sum + Number(item.qty || 0), 0)} шт.
+                      {entry.received_at ? ` · ${new Date(entry.received_at).toLocaleString("ru-RU")}` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {shortages.length > 0 && task.type !== "warehouse_receive_components" && (
             <section className="bg-red-50 border border-red-100 rounded-2xl p-4">
               <h3 className="text-xs font-black uppercase tracking-widest text-red-700 mb-3">
                 {task.type === "procurement_purchase" ? "План закупки" : showComponentChecklist ? "Чеклист комплектующих" : "Дефицит комплектующих"}
               </h3>
+              {task.type === "procurement_purchase" && (
+                <div className="mb-4 rounded-2xl border border-red-100 bg-white p-4">
+                  <p className="mb-3 text-xs font-black text-slate-700">Один счет на выбранные позиции</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <PayloadField label="Номер счета / ссылка" name="invoice" value={completionPayload.invoice} onChange={changePayload} />
+                    <PayloadField label="Поставщик" name="supplier" value={completionPayload.supplier} onChange={changePayload} />
+                    <PayloadField label="Ожидаемая дата" name="expected_date" value={completionPayload.expected_date} onChange={changePayload} type="date" />
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Файл счета</span>
+                      <span className="flex min-h-11 cursor-pointer items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-500 hover:border-blue-300">
+                        <span className="truncate">{completionPayload.invoice_file_name || "Выбрать файл"}</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) setCompletionPayload((current) => ({ ...current, invoice_file: file, invoice_file_name: file.name }));
+                          }}
+                        />
+                      </span>
+                    </label>
+                    <div className="sm:col-span-2 lg:col-span-4">
+                      <PayloadField label="Комментарий к счету" name="comment" value={completionPayload.comment} onChange={changePayload} />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 {shortages.map((item) => (
                   <div key={item.component_id} className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px] gap-3 text-xs text-red-800 border-b border-red-100 last:border-b-0 pb-2 last:pb-0">
@@ -498,70 +637,22 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       )}
                     </div>
                     {task.type === "procurement_purchase" && (
-                      <div className="md:col-span-2 space-y-2">
+                      <div>
                         {deliveries.map((delivery, index) => delivery.component_id === item.component_id && (
-                          <div key={index} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[90px_140px_minmax(0,1fr)_minmax(0,1fr)_110px_90px_32px] gap-2 bg-white border border-red-100 rounded-xl p-2 min-w-0">
+                          <label key={index} className="block">
+                            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-red-400">Купить по этому счету</span>
                             <input
                               type="number"
                               min="0"
                               max={item.shortage_qty || item.qty}
-                              placeholder="Кол-во"
+                              placeholder="0"
                               value={delivery.qty || ""}
                               onChange={(e) => changeDelivery(index, { qty: e.target.value })}
-                              className="w-full min-w-0 p-2 border border-slate-100 rounded-lg text-xs outline-none focus:border-red-400"
+                              className="w-full rounded-xl border border-red-100 bg-white p-2 text-sm font-semibold outline-none focus:border-red-400"
                             />
-                            <input
-                              type="date"
-                              value={delivery.expected_date || ""}
-                              onChange={(e) => changeDelivery(index, { expected_date: e.target.value })}
-                              className="w-full min-w-0 p-2 border border-slate-100 rounded-lg text-xs outline-none focus:border-red-400"
-                            />
-                            <input
-                              placeholder="Счет / ссылка (можно пусто)"
-                              value={delivery.invoice || ""}
-                              onChange={(e) => changeDelivery(index, { invoice: e.target.value })}
-                              className="w-full min-w-0 p-2 border border-slate-100 rounded-lg text-xs outline-none focus:border-red-400"
-                            />
-                            <input
-                              placeholder="Поставщик / комментарий"
-                              value={delivery.supplier || ""}
-                              onChange={(e) => changeDelivery(index, { supplier: e.target.value })}
-                              className="w-full min-w-0 p-2 border border-slate-100 rounded-lg text-xs outline-none focus:border-red-400"
-                            />
-                            <label className="w-full min-w-0 p-2 border border-slate-100 rounded-lg text-xs text-slate-500 bg-white cursor-pointer hover:border-red-400 truncate">
-                              {delivery.invoice_file_name || "Файл счета"}
-                              <input
-                                type="file"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) changeDelivery(index, { invoice_file: file, invoice_file_name: file.name });
-                                }}
-                              />
-                            </label>
-                            <button type="button" onClick={() => addPurchase(delivery)} className="bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest min-h-9">
-                              Закупить
-                            </button>
-                            <button type="button" onClick={() => removeDelivery(index)} className="text-slate-300 hover:text-red-600 text-lg leading-none">×</button>
-                          </div>
+                          </label>
                         ))}
-                        <button type="button" onClick={() => addDelivery(item.component_id)} className="text-[10px] font-black uppercase tracking-widest text-red-600 hover:text-red-700">
-                          Добавить поставку
-                        </button>
                       </div>
-                    )}
-                    {task.type === "warehouse_receive_components" && (
-                      <label className="block">
-                        <span className="block text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">{lineLabel}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max={item.shortage_qty || item.qty}
-                          value={(completionPayload.items || []).find((line) => line.component_id === item.component_id)?.qty || ""}
-                          onChange={(e) => changeLineQty(item.component_id, e.target.value)}
-                          className="w-full p-2 border border-red-100 rounded-xl text-sm outline-none focus:border-red-400 bg-white"
-                        />
-                      </label>
                     )}
                   </div>
                 ))}
@@ -570,7 +661,26 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           )}
 
           <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {task.type === "assembler_build" && <PayloadField label="Собрано изделий" name="assembled_qty" value={completionPayload.assembled_qty} onChange={changePayload} type="number" />}
+            {task.type === "assembler_build" && (
+              <div className="md:col-span-2 space-y-3">
+                <div className={`rounded-2xl border p-4 ${task.payload?.materials_complete ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
+                  <p className={`text-xs font-black ${task.payload?.materials_complete ? "text-emerald-700" : "text-amber-700"}`}>
+                    {task.payload?.materials_complete ? "Полный комплект получен" : "Доступна частичная комплектация"}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                    План заказа: {task.payload?.planned_qty ?? "—"} шт.
+                    {!task.payload?.materials_complete && task.payload?.started_qty > 0 ? ` · Начато: ${task.payload.started_qty} шт.` : ""}
+                  </p>
+                </div>
+                <PayloadField
+                  label={task.payload?.materials_complete ? "Фактически собрано изделий" : "Можно начать или подготовить, шт."}
+                  name="assembled_qty"
+                  value={completionPayload.assembled_qty}
+                  onChange={changePayload}
+                  type="number"
+                />
+              </div>
+            )}
             {task.type === "tester_check" && (
               <>
                 <PayloadField label="Годных изделий" name="passed_qty" value={completionPayload.passed_qty} onChange={changePayload} type="number" />
@@ -625,10 +735,10 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 
         <div className="p-6 border-t border-slate-100 flex justify-between items-center">
           <button onClick={() => onClose()} className="text-xs font-bold text-slate-500">Закрыть</button>
-          {task.status !== "done" && task.type !== "procurement_purchase" && (
+          {task.status !== "done" && (
             canComplete ? (
               <button onClick={complete} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest">
-                {loading ? "Сохранение..." : "Отметить выполненной"}
+                {loading ? "Сохранение..." : task.type === "procurement_purchase" ? "Передать счет на оплату" : task.type === "assembler_build" && !task.payload?.materials_complete ? "Сохранить подготовительные работы" : "Отметить выполненной"}
               </button>
             ) : canTake ? (
               <button onClick={takeTask} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest">
@@ -1369,6 +1479,8 @@ function Personnel({ currentUser }) {
 
 export default function App() {
   const [activePage, setActivePage] = useState("Панель");
+  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [taskChangeVersion, setTaskChangeVersion] = useState(0);
   const [user, setUser] = useState(null);
   const [booting, setBooting] = useState(true);
   const [theme, setTheme] = useState(() => {
@@ -1379,6 +1491,7 @@ export default function App() {
 
   const logout = () => {
     clearToken();
+    setActiveTaskId(null);
     setUser(null);
   };
 
@@ -1413,6 +1526,7 @@ export default function App() {
     if (["Панель", "Все заявки", "Мои задачи"].includes(page)) return true;
     if (page === "База изделий") return userHasRole(user, ["engineer", "manager", "production", "assembler", "tester", "repair_engineer"]);
     if (page === "Склад ТМЦ") return userHasRole(user, ["warehouse", "manager", "engineer", "procurement", "packer"]);
+    if (page === "Склад готовой продукции") return userHasRole(user, ["warehouse", "manager", "production", "packer"]);
     if (page === "Производство") return userHasRole(user, ["warehouse", "manager", "production", "assembler", "tester", "repair_engineer", "packer", "procurement"]);
     return true;
   };
@@ -1431,7 +1545,8 @@ export default function App() {
       case "Персонал": return <Personnel currentUser={user} />;
       case "База изделий": return <GadgetsBase />;
       case "Склад ТМЦ": return <InventoryBase user={user} />;
-      case "Производство": return <ManufacturingPage />;
+      case "Склад готовой продукции": return <FinishedGoodsBase user={user} />;
+      case "Производство": return <ManufacturingPage onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
       default: return <Dashboard user={user} onOpenPage={openPage} />;
     }
   };
@@ -1453,6 +1568,14 @@ export default function App() {
       <main className="app-main">
         {renderContent()}
       </main>
+      {activeTaskId && (
+        <TaskDetailModal
+          taskId={activeTaskId}
+          user={user}
+          onClose={() => setActiveTaskId(null)}
+          onChanged={() => setTaskChangeVersion((version) => version + 1)}
+        />
+      )}
     </div>
   );
 }

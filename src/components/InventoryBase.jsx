@@ -40,6 +40,8 @@ export default function InventoryBase({ user }) {
   const [showForm, setShowForm] = useState(false);
   const [editingComponent, setEditingComponent] = useState(null);
   const [selectedComponent, setSelectedComponent] = useState(null);
+  const [componentMovements, setComponentMovements] = useState([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
   const [incomingCompId, setIncomingCompId] = useState(null);
   const [incomingQty, setIncomingQty] = useState("");
   const [editingQtyId, setEditingQtyId] = useState(null);
@@ -100,6 +102,21 @@ export default function InventoryBase({ user }) {
       .then((data) => setCategories(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!selectedComponent?.id) {
+      setComponentMovements([]);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setMovementsLoading(true);
+    fetch(`/api/inventory/movements?component_id=${selectedComponent.id}&limit=100`, { signal: controller.signal })
+      .then((res) => res.ok ? res.json() : { items: [] })
+      .then((data) => setComponentMovements(Array.isArray(data.items) ? data.items : []))
+      .catch((error) => { if (error.name !== "AbortError") console.error(error); })
+      .finally(() => setMovementsLoading(false));
+    return () => controller.abort();
+  }, [selectedComponent?.id]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -415,6 +432,38 @@ export default function InventoryBase({ user }) {
                       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
                         Характеристики не заполнены.
                       </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">История движения</h3>
+                  <div className="mt-3 space-y-2">
+                    {movementsLoading ? (
+                      <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm text-slate-400">Загрузка истории…</div>
+                    ) : componentMovements.length > 0 ? componentMovements.map((movement) => (
+                      <div key={movement.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className={`text-sm font-black ${movement.direction === "incoming" ? "text-emerald-700" : "text-rose-700"}`}>
+                              {movement.direction === "incoming" ? "Приход" : "Расход"} · {movement.quantity} шт.
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              {movement.created_at ? new Date(movement.created_at).toLocaleString("ru-RU") : "—"}
+                              {movement.order_id ? ` · Заказ №${movement.order_id}` : ""}
+                              {movement.task_id ? ` · Задача №${movement.task_id}` : ""}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-xl bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">Остаток: {movement.balance_after}</span>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          <p>Операцию выполнил: <span className="font-bold text-slate-700">{movement.actor_name || "Не указан"}</span></p>
+                          {movement.direction === "outgoing" && <p className="mt-1">Получатель: <span className="font-bold text-slate-700">{movement.counterparty_name || movement.recipient || movement.counterparty_role || "Не указан"}</span></p>}
+                          {movement.note && <p className="mt-1">{movement.note}</p>}
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-400">Движений пока нет.</div>
                     )}
                   </div>
                 </div>

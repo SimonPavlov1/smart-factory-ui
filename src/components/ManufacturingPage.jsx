@@ -32,16 +32,12 @@ function buildCalendarDays(viewDate) {
   return Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
 }
 
-function CalendarField({ value, onChange, className = "" }) {
+function CalendarField({ value, onChange, className = "", compact = false, disabled = false }) {
   const [open, setOpen] = useState(false);
   const selectedDate = parseDateValue(value);
   const [viewDate, setViewDate] = useState(selectedDate || new Date());
   const days = buildCalendarDays(viewDate);
   const todayValue = dateToValue(new Date());
-
-  useEffect(() => {
-    if (selectedDate) setViewDate(selectedDate);
-  }, [value]);
 
   const selectDate = (date) => {
     onChange(dateToValue(date));
@@ -52,8 +48,9 @@ function CalendarField({ value, onChange, className = "" }) {
     <div className={`relative ${className}`}>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-11 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-left text-sm font-semibold text-slate-800 outline-none transition-all hover:border-blue-100 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+        className={`flex w-full items-center justify-between border border-slate-200 bg-white text-left font-semibold text-slate-800 outline-none transition-all hover:border-blue-100 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50 disabled:text-slate-400 ${compact ? "min-h-9 rounded-xl px-3 py-2 text-xs" : "min-h-11 rounded-2xl px-3.5 py-3 text-sm"}`}
       >
         <span>{selectedDate ? selectedDate.toLocaleDateString("ru-RU") : "Выберите дату"}</span>
         <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -146,7 +143,7 @@ function CalendarField({ value, onChange, className = "" }) {
   );
 }
 
-export default function ManufacturingPage() {
+export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 }) {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -170,6 +167,8 @@ export default function ManufacturingPage() {
   const [requiredMaterials, setRequiredMaterials] = useState([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState("");
+  const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
+  const [isShortagesOpen, setIsShortagesOpen] = useState(false);
 
   const statusLabels = {
     Created: "Создан",
@@ -254,6 +253,10 @@ export default function ManufacturingPage() {
     const scrollY = preserveScroll ? window.scrollY : null;
 
     setActiveOrder(order);
+    if (!background) {
+      setIsMaterialsOpen(false);
+      setIsShortagesOpen(false);
+    }
     if (!background) setOrderDetail(null);
     setOrderDetailError("");
     if (!background) setOrderDetailLoading(true);
@@ -449,6 +452,46 @@ export default function ManufacturingPage() {
     }
   };
 
+  const downloadExcel = async () => {
+    if (!activeOrder || requiredMaterials.length === 0) return;
+    try {
+      const response = await fetch(`/api/manufacturing/orders/${activeOrder.id}/bom-summary.xlsx`);
+      if (!response.ok) throw new Error(`Статус ${response.status}`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Сводная комплектация заказа ${activeOrder.id}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Ошибка Excel:", error);
+      alert("Не удалось скачать комплектацию в Excel.");
+    }
+  };
+
+  const downloadShortagesExcel = async () => {
+    if (!activeOrder || !(orderDetail?.shortages || []).length) return;
+    try {
+      const response = await fetch(`/api/manufacturing/orders/${activeOrder.id}/shortages.xlsx`);
+      if (!response.ok) throw new Error(`Статус ${response.status}`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Ведомость недостающих деталей заказ ${activeOrder.id}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Ошибка Excel:", error);
+      alert("Не удалось скачать ведомость недостающих деталей.");
+    }
+  };
+
   const handleAddItemRow = () => {
     const defaultId = products.length > 0 ? products[0].id : "";
     setSelectedItems([...selectedItems, { product_id: defaultId, quantity: 1 }]);
@@ -537,13 +580,33 @@ export default function ManufacturingPage() {
     }
   };
 
-  const formatDate = (value) => value ? new Date(value).toLocaleDateString("ru-RU") : "—";
-  const inputDate = (value) => value ? new Date(value).toISOString().slice(0, 10) : "";
+  const inputDate = (value) => {
+    if (!value) return "";
+    const datePart = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (datePart) return datePart[1];
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : dateToValue(date);
+  };
+  const formatDate = (value) => {
+    const date = parseDateValue(inputDate(value));
+    return date ? date.toLocaleDateString("ru-RU") : "—";
+  };
 
   useEffect(() => {
     fetchOrders();
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    if (taskChangeVersion > 0 && activeOrder) {
+      const timer = setTimeout(
+        () => handleOpenOrder(activeOrder, { background: true, preserveScroll: true }),
+        0,
+      );
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [taskChangeVersion]);
 
   const stageClassName = (status) => {
     if (status === "done") return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -755,20 +818,99 @@ export default function ManufacturingPage() {
                 <div>
                   <p className="text-[11px] font-bold text-slate-400">Комплектация</p>
                   <h2 className="mt-1 text-lg font-black text-slate-900">Сводная комплектация</h2>
-                  <p className="mt-1 text-sm text-slate-500">Комплектующие и покупные позиции по изделиям заказа.</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {isMaterialsOpen ? "Комплектующие и покупные позиции по изделиям заказа." : "Список скрыт — раскройте его при необходимости."}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={downloadPDF}
-                  disabled={materialsLoading || requiredMaterials.length === 0}
-                  className={`${neutralButtonClass} disabled:opacity-50`}
-                >
-                  PDF
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setIsMaterialsOpen((current) => !current)}
+                    className={neutralButtonClass}
+                  >
+                    {isMaterialsOpen ? "Скрыть" : "Показать комплектацию"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadExcel}
+                    disabled={materialsLoading || requiredMaterials.length === 0}
+                    className={`${neutralButtonClass} disabled:opacity-50`}
+                  >
+                    Скачать Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadPDF}
+                    disabled={materialsLoading || requiredMaterials.length === 0}
+                    className={`${neutralButtonClass} disabled:opacity-50`}
+                  >
+                    PDF
+                  </button>
+                </div>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-                <MaterialsSummary compact />
+              {isMaterialsOpen && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                  <MaterialsSummary compact />
+                </div>
+              )}
+            </section>
+
+            <section className="mb-6 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <div className={`${isShortagesOpen ? "mb-5" : ""} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400">Дефицит</p>
+                  <h2 className="mt-1 text-lg font-black text-slate-900">Ведомость недостающих деталей</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {(orderDetail.shortages || []).length > 0
+                      ? `Не хватает ${(orderDetail.shortages || []).length} позиций. Список скрыт по умолчанию.`
+                      : "Текущего дефицита комплектующих нет."}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setIsShortagesOpen((current) => !current)}
+                    disabled={(orderDetail.shortages || []).length === 0}
+                    className={`${neutralButtonClass} disabled:opacity-50`}
+                  >
+                    {isShortagesOpen ? "Скрыть" : "Показать ведомость"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadShortagesExcel}
+                    disabled={(orderDetail.shortages || []).length === 0}
+                    className={`${neutralButtonClass} disabled:opacity-50`}
+                  >
+                    Скачать Excel
+                  </button>
+                </div>
               </div>
+              {isShortagesOpen && (orderDetail.shortages || []).length > 0 && (
+                <div className="overflow-x-auto rounded-2xl border border-rose-100 bg-white">
+                  <table className="w-full min-w-[760px] text-left text-xs">
+                    <thead className="bg-rose-50 text-rose-700">
+                      <tr>
+                        <th className="px-3 py-3 font-black">Комплектующее</th>
+                        <th className="px-3 py-3 font-black">Артикул</th>
+                        <th className="px-3 py-3 text-right font-black">Требуется</th>
+                        <th className="px-3 py-3 text-right font-black">Доступно</th>
+                        <th className="px-3 py-3 text-right font-black">Не хватает</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(orderDetail.shortages || []).map((item) => (
+                        <tr key={item.component_id} className="border-t border-rose-50 text-slate-700">
+                          <td className="px-3 py-3 font-semibold">{item.component_name || `Компонент ID ${item.component_id}`}</td>
+                          <td className="px-3 py-3 font-mono text-slate-500">{item.part_number || "—"}</td>
+                          <td className="px-3 py-3 text-right font-bold">{item.required_qty || 0}</td>
+                          <td className="px-3 py-3 text-right font-bold text-amber-700">{item.available_qty || 0}</td>
+                          <td className="px-3 py-3 text-right font-black text-rose-700">{item.shortage_qty || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
 
             <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -841,12 +983,11 @@ export default function ManufacturingPage() {
                                   </select>
                                   <SelectChevron />
                                 </div>
-                                <input
-                                  type="date"
+                                <CalendarField
                                   value={inputDate(task.due_date)}
                                   disabled={assigningTaskId === task.id}
-                                  onChange={(e) => setTaskDeadline(task, e.target.value)}
-                                  className={compactFieldClass}
+                                  onChange={(value) => setTaskDeadline(task, value)}
+                                  compact
                                 />
                                 {["assigned", "open"].includes(task.status) && (
                                   <button
@@ -859,6 +1000,15 @@ export default function ManufacturingPage() {
                                   </button>
                                 )}
                               </div>
+                            )}
+                            {onOpenTask && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenTask(task.id)}
+                                className={`${neutralButtonClass} mt-3 min-h-9 w-full px-3 py-2 text-xs`}
+                              >
+                                Открыть задачу
+                              </button>
                             )}
                           </div>
                         ))}

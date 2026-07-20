@@ -88,6 +88,7 @@ const menuItems = [
     { id: 'Персонал', icon: Icons.Users },
     { id: 'База изделий', icon: Icons.Gadgets },
     { id: 'Склад ТМЦ', icon: Icons.Warehouse },
+    { id: 'Склад готовой продукции', icon: Icons.Warehouse },
     { id: 'Производство', icon: Icons.Tasks },
 ];
 
