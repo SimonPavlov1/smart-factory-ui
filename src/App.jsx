@@ -298,7 +298,7 @@ function TaskCard({
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
             Заказ #{task.order_id || "—"} · {ROLE_LABELS[task.role] || task.role}
           </div>
-          <h3 className={`${compact ? "line-clamp-2" : ""} text-sm font-black text-slate-900 mt-1`}>{task.title}</h3>
+          <h3 className={`${compact ? "line-clamp-2" : ""} mt-1 break-words text-sm font-black leading-snug text-slate-900`}>{task.title}</h3>
           <div className="text-[11px] text-slate-400 mt-1">Исполнитель: {assigneeName(task)}</div>
         </div>
         <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg border ${taskStatusClass(task)}`}>
@@ -2626,6 +2626,364 @@ function TaskList({ endpoint, user, onOpenPage, title, subtitle }) {
   );
 }
 
+function TaskCalendar({ endpoint, user, onOpenPage }) {
+  const { tasks, loading, reload } = useTasks(endpoint);
+  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [periodOffset, setPeriodOffset] = useState(0);
+  const [viewMode, setViewMode] = useState("week");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+
+  const toDateOnly = (date) => {
+    const result = new Date(date);
+    result.setHours(0, 0, 0, 0);
+    return result;
+  };
+  const formatIsoDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const parseTaskDate = (task) => {
+    const expected = taskExpectedDates(task)[0];
+    const value = task.due_date || expected || (task.status === "done" ? task.completed_at : null);
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return toDateOnly(date);
+  };
+
+  const today = toDateOnly(new Date());
+  const addMonths = (date, months) => {
+    const result = new Date(date);
+    result.setMonth(result.getMonth() + months);
+    return result;
+  };
+  const startOfWeek = (date) => {
+    const result = toDateOnly(date);
+    const day = result.getDay() || 7;
+    result.setDate(result.getDate() - day + 1);
+    return result;
+  };
+  const endOfWeek = (date) => {
+    const result = startOfWeek(date);
+    result.setDate(result.getDate() + 6);
+    return result;
+  };
+  const selectedDay = (() => {
+    const date = toDateOnly(new Date());
+    date.setDate(date.getDate() + periodOffset);
+    return date;
+  })();
+  const weekStart = (() => {
+    const date = toDateOnly(new Date());
+    date.setDate(date.getDate() + periodOffset * 7);
+    return startOfWeek(date);
+  })();
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    return date;
+  });
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const monthDate = addMonths(toDateOnly(new Date()), periodOffset);
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const monthGridStart = startOfWeek(monthStart);
+  const monthGridEnd = endOfWeek(monthEnd);
+  const monthDays = [];
+  for (let date = new Date(monthGridStart); date <= monthGridEnd; date.setDate(date.getDate() + 1)) {
+    monthDays.push(new Date(date));
+  }
+  const visibleDays = viewMode === "day" ? [selectedDay] : viewMode === "month" ? monthDays : weekDays;
+  const periodStart = visibleDays[0];
+  const periodEnd = visibleDays[visibleDays.length - 1];
+
+  const roles = [...new Set(tasks.map((task) => task.role).filter(Boolean))].sort();
+  const statuses = [...new Set(tasks.map((task) => taskKanbanColumn(task)).filter(Boolean))].sort();
+  const filteredTasks = tasks.filter((task) => {
+    if (statusFilter !== "all" && taskKanbanColumn(task) !== statusFilter) return false;
+    if (roleFilter !== "all" && task.role !== roleFilter) return false;
+    return true;
+  });
+
+  const activeTasks = filteredTasks.filter((task) => task.status !== "done");
+  const overdueTasks = filteredTasks.filter((task) => {
+    const date = parseTaskDate(task);
+    return task.status !== "done" && date && date < today;
+  });
+  const unassignedTasks = activeTasks.filter((task) => !task.assigned_user_id);
+  const noDateTasks = activeTasks.filter((task) => !parseTaskDate(task));
+  const waitingTasks = activeTasks.filter((task) => taskKanbanColumn(task) === "waiting_delivery");
+  const doneTodayTasks = filteredTasks.filter((task) => {
+    const date = parseTaskDate(task);
+    return task.status === "done" && date && formatIsoDate(date) === formatIsoDate(today);
+  });
+
+  const tasksByDay = visibleDays.reduce((result, day) => {
+    result[formatIsoDate(day)] = [];
+    return result;
+  }, {});
+  filteredTasks.forEach((task) => {
+    const date = parseTaskDate(task);
+    if (!date) return;
+    const key = formatIsoDate(date);
+    if (date >= periodStart && date <= periodEnd && tasksByDay[key]) {
+      tasksByDay[key].push(task);
+    }
+  });
+  Object.values(tasksByDay).forEach((items) => items.sort((a, b) => taskKanbanColumn(a).localeCompare(taskKanbanColumn(b)) || a.id - b.id));
+  const orderGroups = Object.values(filteredTasks.reduce((result, task) => {
+    const key = task.order_id ? String(task.order_id) : "no-order";
+    if (!result[key]) {
+      result[key] = {
+        key,
+        title: task.order_id ? `Заказ #${task.order_id}` : "Без производственного заказа",
+        tasks: [],
+      };
+    }
+    result[key].tasks.push(task);
+    return result;
+  }, {})).sort((a, b) => {
+    if (a.key === "no-order") return 1;
+    if (b.key === "no-order") return -1;
+    return Number(b.key) - Number(a.key);
+  });
+
+  const viewLabel = ({
+    day: selectedDay.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" }),
+    week: `${weekStart.toLocaleDateString("ru-RU")} - ${weekEnd.toLocaleDateString("ru-RU")}`,
+    month: monthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" }),
+    orders: "Группировка по производственным заказам",
+  })[viewMode];
+  const stepPeriod = (direction) => setPeriodOffset((value) => value + direction);
+  const resetPeriod = () => setPeriodOffset(0);
+  const changeViewMode = (mode) => {
+    setViewMode(mode);
+    setPeriodOffset(0);
+  };
+  const calendarButton = "inline-flex min-h-10 items-center justify-center rounded-xl border px-4 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0";
+  const fieldClass = "w-full min-h-10 appearance-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 outline-none transition-all focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10";
+
+  const statusLabel = (key) => ({
+    assigned: "Назначены",
+    in_progress: "В работе",
+    hold: "Холд",
+    waiting_delivery: "Ожидание",
+    delayed: "Задержка",
+    done: "Готово",
+  }[key] || key);
+
+  const statusBadgeClass = (task) => {
+    const column = taskKanbanColumn(task);
+    if (column === "delayed") return "border-rose-100 bg-rose-50 text-rose-600";
+    if (column === "done") return "border-emerald-100 bg-emerald-50 text-emerald-700";
+    if (column === "waiting_delivery") return "border-amber-100 bg-amber-50 text-amber-700";
+    if (column === "hold") return "border-orange-100 bg-orange-50 text-orange-700";
+    if (column === "in_progress") return "border-blue-100 bg-blue-50 text-[#3F8CFF]";
+    return "border-slate-100 bg-slate-50 text-slate-500";
+  };
+
+  const miniTask = (task) => (
+    <button
+      key={task.id}
+      type="button"
+      onClick={() => setActiveTaskId(task.id)}
+      title={task.title}
+      className="block w-full rounded-2xl border border-slate-100 bg-white p-3 text-left text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="line-clamp-2 min-w-0 break-words font-black leading-snug text-slate-900">{task.title}</span>
+        <span className="shrink-0 rounded-lg bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-400">#{task.id}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(task)}`}>{statusLabel(taskKanbanColumn(task))}</span>
+        <span className="rounded-full border border-slate-100 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{ROLE_LABELS[task.role] || task.role}</span>
+      </div>
+      <div className="mt-2 font-semibold text-slate-500">Заказ #{task.order_id || "—"}</div>
+      <div className="mt-1 font-semibold text-slate-400">{assigneeName(task)}</div>
+    </button>
+  );
+
+  return (
+    <div className="flex h-full w-full max-w-none flex-col gap-6 p-4 sm:p-6 lg:p-8">
+      <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-[11px] font-bold text-slate-400">Диспетчерский календарь</p>
+            <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Все заявки</h1>
+            <p className="mt-2 text-sm font-medium text-slate-500">План-график задач по срокам, статусам и ответственным.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["Активно", activeTasks.length, "text-[#3F8CFF]"],
+              ["Просрочено", overdueTasks.length, "text-rose-600"],
+              ["Без исполнителя", unassignedTasks.length, "text-slate-700"],
+              ["Ожидание", waitingTasks.length, "text-amber-700"],
+              ["Готово сегодня", doneTodayTasks.length, "text-emerald-700"],
+            ].map(([label, value, cls]) => (
+              <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+                <div className={`mt-1 text-xl font-black ${cls}`}>{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_180px_auto] lg:items-end">
+          <div className="flex flex-wrap gap-2">
+            {viewMode !== "orders" && (
+              <>
+                <button type="button" onClick={() => stepPeriod(-1)} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Назад</button>
+                <button type="button" onClick={resetPeriod} className={`${calendarButton} border-[#3F8CFF] bg-[#3F8CFF] text-white shadow-sm hover:bg-[#1f78ff] hover:shadow-md`}>Сегодня</button>
+                <button type="button" onClick={() => stepPeriod(1)} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Вперед</button>
+              </>
+            )}
+            <div className="inline-flex min-h-10 items-center rounded-2xl border border-slate-100 bg-white px-4 text-xs font-black text-slate-600">
+              {viewLabel}
+            </div>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Статус</span>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={fieldClass}>
+              <option value="all">Все статусы</option>
+              {statuses.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Отдел</span>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={fieldClass}>
+              <option value="all">Все отделы</option>
+              {roles.map((role) => <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={reload} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Обновить</button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            ["day", "День"],
+            ["week", "Неделя"],
+            ["month", "Месяц"],
+            ["orders", "По заказам"],
+          ].map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => changeViewMode(mode)}
+              className={`${calendarButton} ${
+                viewMode === mode
+                  ? "border-[#3F8CFF] bg-[#3F8CFF] text-white shadow-sm hover:bg-[#1f78ff] hover:shadow-md"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-medium text-slate-400">Загрузка задач...</div>
+      ) : (
+        <>
+          {(overdueTasks.length > 0 || noDateTasks.length > 0) && (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {overdueTasks.length > 0 && (
+                <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-black text-slate-900">Просрочено</h2>
+                    <span className="rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-600">{overdueTasks.length}</span>
+                  </div>
+                  <div className="space-y-2">{overdueTasks.slice(0, 8).map(miniTask)}</div>
+                </section>
+              )}
+              {noDateTasks.length > 0 && (
+                <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-black text-slate-900">Без срока</h2>
+                    <span className="rounded-full border border-slate-100 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-500">{noDateTasks.length}</span>
+                  </div>
+                  <div className="space-y-2">{noDateTasks.slice(0, 8).map(miniTask)}</div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {viewMode === "orders" ? (
+            <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+              {orderGroups.length > 0 ? orderGroups.map((group) => {
+                const groupActive = group.tasks.filter((task) => task.status !== "done").length;
+                const groupDone = group.tasks.filter((task) => task.status === "done").length;
+                return (
+                  <section key={group.key} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-400">Производственный заказ</p>
+                        <h2 className="mt-1 text-xl font-black text-slate-900">{group.title}</h2>
+                        <p className="mt-2 text-sm font-medium text-slate-500">Вся цепочка задач по заявке на производство</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-xs font-bold text-slate-600">Активно: <b className="text-[#3F8CFF]">{groupActive}</b></span>
+                        <span className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-xs font-bold text-slate-600">Готово: <b className="text-emerald-700">{groupDone}</b></span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {group.tasks
+                        .slice()
+                        .sort((a, b) => (parseTaskDate(a)?.getTime() || 0) - (parseTaskDate(b)?.getTime() || 0) || a.id - b.id)
+                        .map(miniTask)}
+                    </div>
+                  </section>
+                );
+              }) : (
+                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-medium text-slate-400">Задач нет.</div>
+              )}
+            </div>
+          ) : (
+          <div className={`grid grid-cols-1 gap-3 ${viewMode === "day" ? "" : "xl:grid-cols-7"}`}>
+            {visibleDays.map((day) => {
+              const key = formatIsoDate(day);
+              const dayTasks = tasksByDay[key] || [];
+              const isToday = key === formatIsoDate(today);
+              const isCurrentMonth = viewMode !== "month" || day.getMonth() === monthDate.getMonth();
+              return (
+                <section key={key} className={`rounded-3xl border border-slate-100 bg-white p-3 shadow-sm ${viewMode === "day" ? "min-h-[560px]" : "min-h-[320px]"} ${isCurrentMonth ? "" : "opacity-55"}`}>
+                  <div className={`sticky top-0 z-10 mb-3 rounded-2xl border px-3 py-2 backdrop-blur ${isToday ? "border-blue-100 bg-blue-50/80" : "border-slate-100 bg-slate-50/90"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-black text-slate-900">{day.toLocaleDateString("ru-RU", { weekday: "short" })}</div>
+                        <div className="text-xs font-semibold text-slate-400">{day.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</div>
+                      </div>
+                      <span className="rounded-xl border border-slate-100 bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">{dayTasks.length}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {dayTasks.length > 0 ? dayTasks.map(miniTask) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center text-xs font-medium text-slate-400">Нет задач</div>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+          )}
+        </>
+      )}
+
+      {activeTaskId && (
+        <TaskDetailModal
+          taskId={activeTaskId}
+          user={user}
+          onClose={() => setActiveTaskId(null)}
+          onChanged={reload}
+        />
+      )}
+    </div>
+  );
+}
+
 function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
   const { tasks, loading, reload } = useTasks(endpoint);
   const [activeTaskId, setActiveTaskId] = useState(null);
@@ -3056,10 +3414,8 @@ const Dashboard = ({ user, onOpenPage }) => {
 };
 
 const AllApplications = ({ user, onOpenPage }) => (
-  <TaskList
+  <TaskCalendar
     endpoint={userHasRole(user, ["admin", "manager"]) ? "/api/tasks" : "/api/tasks/mine"}
-    title="Все заявки"
-    subtitle="Цепочка workflow-задач"
     user={user}
     onOpenPage={onOpenPage}
   />
