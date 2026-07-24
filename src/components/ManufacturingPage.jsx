@@ -171,6 +171,10 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
   const [isShortagesOpen, setIsShortagesOpen] = useState(false);
 
   const statusLabels = {
+    planned: "Запланирован",
+    in_progress: "В работе",
+    blocked: "Приостановлен",
+    completed: "Готов к отгрузке",
     Created: "Создан",
     "In Progress": "В ожидании",
     Reserved: "Зарезервировано",
@@ -599,6 +603,10 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
   };
 
   const orderStatusClass = (status) => {
+    if (status === "completed") return "border-emerald-100 bg-emerald-50 text-emerald-700";
+    if (status === "in_progress") return "border-blue-100 bg-blue-50 text-blue-700";
+    if (status === "blocked") return "border-rose-100 bg-rose-50 text-rose-700";
+    if (status === "planned") return "border-slate-100 bg-slate-50 text-slate-600";
     if (status === "Materials Issued") return "border-amber-100 bg-amber-50 text-amber-700";
     if (status === "Reserved") return "border-blue-100 bg-blue-50 text-blue-700";
     if (["In Assembly", "Quality Check", "Ready For Packing", "Finished Goods", "Ready To Ship"].includes(status)) {
@@ -703,6 +711,17 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
                 )}
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-500">{activeOrder.customer_name || "Заказчик не указан"}</p>
+              {orderDetail?.progress && (
+                <div className="mt-4 max-w-xl">
+                  <div className="mb-1 flex justify-between text-[11px] font-bold text-slate-400">
+                    <span>{orderDetail.progress.tasks_done} из {orderDetail.progress.tasks_total} задач · готово {orderDetail.progress.finished_qty} из {orderDetail.progress.planned_qty} шт.</span>
+                    <span>{orderDetail.progress.percent}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-[#3F8CFF]" style={{ width: `${orderDetail.progress.percent}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
@@ -1060,6 +1079,17 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0 })
                       </span>
                     </div>
                     <p className="mt-1 truncate text-sm font-semibold text-slate-700">{order.customer_name || "Заказчик не указан"}</p>
+                    {order.progress && (
+                      <div className="mt-3">
+                        <div className="mb-1 flex justify-between text-[10px] font-bold text-slate-400">
+                          <span>{order.progress.tasks_done} из {order.progress.tasks_total} задач</span>
+                          <span>{order.progress.percent}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-[#3F8CFF] transition-all" style={{ width: `${order.progress.percent}%` }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
                     {totalQty} шт.

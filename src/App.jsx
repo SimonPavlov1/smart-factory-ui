@@ -29,6 +29,7 @@ const TASK_PAGE = {
   warehouse_receive_components: "Склад ТМЦ",
   warehouse_issue_materials: "Производство",
   repair_issue_materials: "Производство",
+  repair_receive_materials: "Производство",
   assembler_receive_materials: "Производство",
   assembler_build: "Производство",
   tester_check: "Производство",
@@ -201,11 +202,14 @@ function defaultCompletionPayload(task) {
     };
   }
   if (task.type === "tester_check") {
+    const productLines = task.payload?.pending_product_lines?.length
+      ? task.payload.pending_product_lines
+      : (task.payload?.product_lines || []);
     return {
       passed_qty: "",
       defective_qty: "0",
       notes: "",
-      defective_products: (task.payload?.product_lines || []).map((item) => ({
+      defective_products: productLines.map((item) => ({
         product_id: item.product_id,
         product_name: item.product_name,
         drawing_number: item.drawing_number,
@@ -221,7 +225,18 @@ function defaultCompletionPayload(task) {
   if (task.type === "repair_defects") return { notes: "", extra_components: [] };
   if (task.type === "packer_pack") return { packed_qty: "" };
   if (task.type === "accounting_payment") return { payment_ref: "", payment_order_file: null, payment_order_file_name: "", notes: "" };
-  if (task.type === "warehouse_finished_goods") return { accepted_goods: [], notes: "" };
+  if (task.type === "warehouse_finished_goods") {
+    const finishedGoods = task.payload?.pending_product_lines?.length
+      ? task.payload.pending_product_lines
+      : (task.payload?.finished_goods || []);
+    return {
+      accepted_goods: finishedGoods.map((item) => ({
+        product_id: item.product_id,
+        qty: item.qty || "",
+      })),
+      notes: "",
+    };
+  }
   return {};
 }
 
@@ -250,6 +265,35 @@ function lineProductLabel(item) {
 
 function taskFileUrl(file) {
   return `/api${file.url}`;
+}
+
+function AuthenticatedFileLink({ file, className = "", children }) {
+  const openFile = async (event) => {
+    event.preventDefault();
+    const preview = window.open("about:blank", "_blank");
+    if (preview) preview.opener = null;
+    try {
+      const response = await fetch(taskFileUrl(file));
+      if (!response.ok) throw new Error("Не удалось открыть файл");
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      if (preview) {
+        preview.location.href = objectUrl;
+      } else {
+        window.open(objectUrl, "_blank", "noopener,noreferrer");
+      }
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      if (preview) preview.close();
+      window.alert(error.message || "Не удалось открыть файл");
+    }
+  };
+
+  return (
+    <a href={taskFileUrl(file)} onClick={openFile} className={className}>
+      {children}
+    </a>
+  );
 }
 
 function productFileUrl(file) {
@@ -320,6 +364,7 @@ function TaskCard({
 }
 
 function TaskDetailModal({ taskId, user, onClose, onChanged }) {
+  const completionKeyRef = useRef(null);
   const [task, setTask] = useState(null);
   const [users, setUsers] = useState([]);
   const [note, setNote] = useState("");
@@ -342,7 +387,10 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     }
   };
 
-  useEffect(() => { load(); }, [taskId]);
+  useEffect(() => {
+    completionKeyRef.current = null;
+    load();
+  }, [taskId]);
 
   useEffect(() => {
     const loadBomOptions = async () => {
@@ -697,7 +745,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const action = task.type === "assembler_receive_materials" ? "Получение" : "Выдача";
+    const action = ["assembler_receive_materials", "repair_receive_materials"].includes(task.type) ? "Получение" : "Выдача";
     link.href = url;
     link.download = `${action} комплектующих заказ ${task.order_id}.xlsx`;
     document.body.appendChild(link);
@@ -707,6 +755,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   };
 
   const complete = async (saveOnly = false) => {
+    completionKeyRef.current ||= crypto.randomUUID();
     setLoading(true);
     setError("");
     setSuccessMessage("");
@@ -838,10 +887,11 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     const res = await fetch(`/api/tasks/${taskId}/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: numericPayload }),
+      body: JSON.stringify({ payload: numericPayload, idempotency_key: completionKeyRef.current }),
     });
     setLoading(false);
     if (res.ok) {
+      completionKeyRef.current = null;
       const data = await res.json();
       onChanged();
       if (["partial", "waiting_delivery"].includes(data.result?.status)) {
@@ -880,9 +930,14 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const orderedItems = task.payload?.ordered_items || (task.type === "warehouse_receive_components" ? shortages : []);
   const receiptHistory = task.payload?.receipt_history || [];
   const transferMaterials = task.payload?.materials || [];
+  const materialTransfer = task.payload?.material_transfer || null;
+  const transferLineFor = (material) => (materialTransfer?.lines || []).find((line) => (
+    material.line_uid ? line.line_uid === material.line_uid : line.component_id === material.component_id
+  ));
   const productDocuments = task.payload?.product_documents || [];
-  const finishedGoods = task.payload?.finished_goods || [];
-  const testProductLines = task.payload?.product_lines || [];
+  const pendingProductLines = task.payload?.pending_product_lines || [];
+  const finishedGoods = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.finished_goods || []);
+  const testProductLines = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.product_lines || []);
   const testTotalQty = testProductLines.reduce((sum, item) => sum + Number(item.qty || 0), testProductLines.length ? 0 : Number(task.payload?.assembled_qty || 0));
   const testDefectiveTotal = (completionPayload.defective_products || []).reduce((sum, item) => sum + Number(item.defective_qty || 0), Number(testProductLines.length ? 0 : completionPayload.defective_qty || 0));
   const testPassedTotal = Math.max(testTotalQty - testDefectiveTotal, 0);
@@ -891,8 +946,8 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const dailyProgress = task.payload?.daily_progress || [];
   const materialRequests = task.payload?.material_requests || [];
   const openMaterialFlow = task.payload?.open_material_flow || [];
-  const repairDefectiveProducts = task.payload?.defective_products || [];
-  const repairDefectiveQty = Number(task.payload?.defective_qty || repairDefectiveProducts.reduce((sum, item) => sum + Number(item.defective_qty || 0), 0));
+  const repairDefectiveProducts = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.defective_products || []);
+  const repairDefectiveQty = repairDefectiveProducts.reduce((sum, item) => sum + Number(item.qty || item.defective_qty || 0), 0);
   const repairContext = task.payload?.product_context || repairDefectiveProducts[0] || {};
   const repairComponentOptions = (task.payload?.component_options || []).length > 0 ? task.payload.component_options : bomComponentOptions;
   const deliveries = completionPayload.deliveries || [];
@@ -962,6 +1017,8 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       ? "Передать на оплату"
       : task.type === "repair_defects" && hasRepairExtraComponents
         ? "Создать заявку на компоненты"
+        : task.type === "repair_defects"
+          ? "Завершить ремонт"
         : task.type === "assembler_build" && hasOpenMaterialFlow
             ? "Ожидает допкомпоненты"
           : task.type === "assembler_build"
@@ -993,6 +1050,21 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
         <div className="p-6 overflow-y-auto space-y-6">
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
           {successMessage && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3">{successMessage}</div>}
+          {task.payload?.batch_summary && (
+            <section className="grid grid-cols-2 gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 md:grid-cols-4">
+              {[
+                ["Текущая партия", task.payload.batch_summary.current_batch_id ? `#${task.payload.batch_summary.current_batch_id}` : "—"],
+                ["В этой поставке", `${task.payload.batch_summary.current_batch_qty} шт.`],
+                ["Всего в очереди", `${task.payload.batch_summary.pending_qty} шт.`],
+                ["Партий ожидает", task.payload.batch_summary.batches_waiting],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-blue-400">{label}</div>
+                  <div className="mt-1 text-lg font-black text-blue-800">{value}</div>
+                </div>
+              ))}
+            </section>
+          )}
 
           {(canTake || canManageTasks(user)) && !["done", "waiting_delivery", "ready_to_issue"].includes(task.status) && (
             <section className="bg-slate-50 border border-slate-100 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3 items-end">
@@ -1033,9 +1105,9 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 	                      <div className="text-[11px] font-semibold text-slate-400 mt-1">{lineProductLabel(purchase)}</div>
 	                      <div className="text-slate-400 mt-1 break-words">{[purchase.supplier, purchase.invoice, purchase.expected_date].filter(Boolean).join(" · ") || "Без реквизитов"}</div>
                         {purchase.invoice_attachment && (
-                          <a className="mt-2 inline-flex rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700" href={taskFileUrl(purchase.invoice_attachment)} target="_blank" rel="noreferrer">
+                          <AuthenticatedFileLink file={purchase.invoice_attachment} className="mt-2 inline-flex rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">
                             Счет
-                          </a>
+                          </AuthenticatedFileLink>
                         )}
                     </div>
                     <div className="font-black text-slate-900">Заказано {purchase.qty}</div>
@@ -1047,7 +1119,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             </section>
           )}
 
-          {["warehouse_issue_materials", "assembler_receive_materials", "repair_issue_materials"].includes(task.type) && transferMaterials.length > 0 && (
+          {["warehouse_issue_materials", "assembler_receive_materials", "repair_issue_materials", "repair_receive_materials"].includes(task.type) && transferMaterials.length > 0 && (
             <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1055,6 +1127,15 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     {task.type === "assembler_receive_materials" ? "Список на получение" : "Список на выдачу"}
                   </h3>
                   <p className="mt-1 text-xs font-semibold text-blue-600">Заказ №{task.order_id} · {transferMaterials.length} поз. · {transferQtyTotal} шт.</p>
+                  {materialTransfer && (
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      Передача №{materialTransfer.id} · Получатель: {ROLE_LABELS[materialTransfer.recipient_role] || materialTransfer.recipient_role} · Статус: {{
+                        reserved: "Зарезервировано",
+                        issued: "Выдано складом",
+                        accepted: "Получено",
+                      }[materialTransfer.status] || materialTransfer.status}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <div className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-center text-xs">
@@ -1082,19 +1163,25 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       <th className="px-3 py-2.5 font-black">Изделие</th>
                       <th className="px-3 py-2.5 font-black">Комплектующее</th>
                       <th className="px-3 py-2.5 font-black">Артикул</th>
-                      <th className="px-3 py-2.5 text-right font-black">Количество</th>
+                      <th className="px-3 py-2.5 text-right font-black">Запрошено</th>
+                      <th className="px-3 py-2.5 text-right font-black">Выдано</th>
+                      <th className="px-3 py-2.5 text-right font-black">Получено</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transferMaterials.map((material, index) => (
+                    {transferMaterials.map((material, index) => {
+                      const transferLine = transferLineFor(material);
+                      return (
                       <tr key={`${material.component_id}-${index}`} className="border-t border-blue-50 text-slate-700">
                         <td className="px-3 py-3 text-slate-400">{index + 1}</td>
                         <td className="px-3 py-3 font-semibold text-slate-500">{lineProductLabel(material)}</td>
                         <td className="px-3 py-3 font-semibold">{material.component_name || `Компонент ID ${material.component_id}`}</td>
                         <td className="px-3 py-3 font-mono text-slate-500">{material.part_number || "—"}</td>
-                        <td className="px-3 py-3 text-right font-black">{material.qty || 0}</td>
+                        <td className="px-3 py-3 text-right font-black">{transferLine?.requested_qty ?? material.requested_qty ?? material.qty ?? 0}</td>
+                        <td className="px-3 py-3 text-right font-black text-blue-700">{transferLine?.issued_qty ?? 0}</td>
+                        <td className="px-3 py-3 text-right font-black text-emerald-700">{transferLine?.accepted_qty ?? 0}</td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
               </div>
@@ -1126,14 +1213,14 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
               {(task.payload?.invoice_attachment || task.payload?.payment?.payment_order_attachment) && (
                 <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
                   {task.payload?.invoice_attachment && (
-                    <a className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-emerald-700 hover:bg-emerald-50" href={taskFileUrl(task.payload.invoice_attachment)} target="_blank" rel="noreferrer">
+                    <AuthenticatedFileLink file={task.payload.invoice_attachment} className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-emerald-700 hover:bg-emerald-50">
                       Счет: {task.payload.invoice_attachment.original_name}
-                    </a>
+                    </AuthenticatedFileLink>
                   )}
                   {task.payload?.payment?.payment_order_attachment && (
-                    <a className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-emerald-700 hover:bg-emerald-50" href={taskFileUrl(task.payload.payment.payment_order_attachment)} target="_blank" rel="noreferrer">
+                    <AuthenticatedFileLink file={task.payload.payment.payment_order_attachment} className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-emerald-700 hover:bg-emerald-50">
                       Платежное поручение: {task.payload.payment.payment_order_attachment.original_name}
-                    </a>
+                    </AuthenticatedFileLink>
                   )}
                 </div>
               )}
@@ -1914,7 +2001,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                             <div className="mt-1 text-xs font-semibold text-slate-400">{item.drawing_number || repairContext.drawing_number || "Без децимального номера"}</div>
                           </div>
                           <div className="rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-slate-700">
-                            {item.defective_qty || repairDefectiveQty || 0} шт.
+                            {item.qty || item.defective_qty || repairDefectiveQty || 0} шт.
                           </div>
                         </div>
                       </div>
@@ -2081,7 +2168,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     <p className="mt-1 text-xs font-semibold text-slate-400">Проверьте количество упакованных изделий и передайте на склад готовой продукции.</p>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-center text-xs">
-                    <div className="text-xl font-black text-blue-700">{Number(task.payload?.packed_qty || task.payload?.planned_qty || task.payload?.product_context?.qty || 0) || "—"}</div>
+                    <div className="text-xl font-black text-blue-700">{Number(task.payload?.batch_summary?.pending_qty || task.payload?.packed_qty || task.payload?.planned_qty || task.payload?.product_context?.qty || 0) || "—"}</div>
                     <div className="font-semibold text-blue-600">план</div>
                   </div>
                 </div>
@@ -2102,9 +2189,9 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     <p className="mt-1 text-xs font-semibold text-slate-400">Проверьте счет и приложите оплаченное платежное поручение.</p>
                   </div>
                   {task.payload?.invoice_attachment ? (
-                    <a className="inline-flex rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100" href={taskFileUrl(task.payload.invoice_attachment)} target="_blank" rel="noreferrer">
+                    <AuthenticatedFileLink file={task.payload.invoice_attachment} className="inline-flex rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">
                       Счет: {task.payload.invoice_attachment.original_name}
-                    </a>
+                    </AuthenticatedFileLink>
                   ) : (
                     <span className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-400">Счет не приложен</span>
                   )}
@@ -2201,7 +2288,11 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 		                </button>
 	              </div>
             ) : task.status === "ready_to_issue" ? (
-              <span className="text-xs font-bold text-slate-400">Ожидает получения сборщиком</span>
+              <span className="text-xs font-bold text-slate-400">
+                {task.type === "repair_issue_materials" && task.payload?.counterparty_role !== "assembler"
+                  ? "Ожидает получения инженером по ремонту"
+                  : "Ожидает получения сборщиком"}
+              </span>
             ) : canTake ? (
               <button onClick={takeTask} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest">
                 Взять в работу
@@ -2217,6 +2308,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 }
 
 function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
+  const completionKeyRef = useRef(null);
   const [task, setTask] = useState(null);
   const [payload, setPayload] = useState({});
   const [loading, setLoading] = useState(false);
@@ -2254,7 +2346,10 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
     setPayload({ ...defaults, ...(data.payload?.completion || {}) });
   };
 
-  useEffect(() => { load(); }, [taskId]);
+  useEffect(() => {
+    completionKeyRef.current = null;
+    load();
+  }, [taskId]);
 
   const change = (name, value) => setPayload((current) => ({ ...current, [name]: value }));
   const changeLine = (collection, componentId, value, lineUid = "") => {
@@ -2297,6 +2392,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
   };
 
   const complete = async () => {
+    completionKeyRef.current ||= crypto.randomUUID();
     setLoading(true);
     setError("");
     const numericPayload = { ...payload };
@@ -2357,7 +2453,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
     const res = await fetch(`/api/tasks/${taskId}/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: numericPayload }),
+      body: JSON.stringify({ payload: numericPayload, idempotency_key: completionKeyRef.current }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -2365,6 +2461,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
       setError(data.detail || "Не удалось завершить задачу");
       return;
     }
+    completionKeyRef.current = null;
     await onChanged();
     if (saveOnly) {
       await load();
@@ -2433,9 +2530,9 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
           )}
 
           {task.type === "accounting_payment" && task.payload?.invoice_attachment && (
-            <a className="inline-flex rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100" href={taskFileUrl(task.payload.invoice_attachment)} target="_blank" rel="noreferrer">
+            <AuthenticatedFileLink file={task.payload.invoice_attachment} className="inline-flex rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">
               Счет закупщика: {task.payload.invoice_attachment.original_name}
-            </a>
+            </AuthenticatedFileLink>
           )}
 
           {["procurement_purchase", "warehouse_receive_components"].includes(task.type) && shortages.length > 0 && (
