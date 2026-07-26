@@ -22,6 +22,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
   const [name, setName] = useState("");
   const [drawingNumber, setDrawingNumber] = useState("");
   const [revision, setRevision] = useState("1.0");
+  const [factoryNumberStart, setFactoryNumberStart] = useState(1);
   const [testChecklist, setTestChecklist] = useState([]);
   const [requiresPreassemblyTest, setRequiresPreassemblyTest] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,12 +43,14 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
         setName(initialData.name || "");
         setDrawingNumber(initialData.drawing_number || "");
         setRevision(initialData.revision || initialData.version || "1.0");
+        setFactoryNumberStart(Math.max(1, Number(initialData.factory_number_start) || 1));
         setTestChecklist((initialData.test_checklist || []).map((item) => typeof item === "string" ? item : item.label || ""));
         setRequiresPreassemblyTest(!!initialData.requires_preassembly_test);
       } else {
         setName("");
         setDrawingNumber("");
         setRevision("1.0");
+        setFactoryNumberStart(1);
         setTestChecklist([]);
         setRequiresPreassemblyTest(false);
       }
@@ -78,6 +81,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
             revision: revision.trim() || "1.0",
             test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
             requires_preassembly_test: requiresPreassemblyTest,
+            factory_number_start: Math.max(1, Number(factoryNumberStart) || 1),
           }
         : {
             name: name.trim(),
@@ -86,6 +90,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
             is_final: !isSubAssemblyUnit,
             test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
             requires_preassembly_test: requiresPreassemblyTest,
+            factory_number_start: Math.max(1, Number(factoryNumberStart) || 1),
             components: [],
           };
 
@@ -222,6 +227,31 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
                     onChange={(e) => setRevision(e.target.value)}
                     placeholder="1.0"
                     className="w-full p-3.5 text-sm border border-slate-200 rounded-2xl text-slate-900 font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_160px] sm:items-center">
+                  <div>
+                    <label htmlFor="factory-number-start" className="block text-sm font-black text-slate-900">
+                      Начальный заводской номер
+                    </label>
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                      Первый экземпляр получит суффикс {String(Math.max(1, Number(factoryNumberStart) || 1)).padStart(3, "0")}.
+                      Уже выданные номера не изменятся и не будут использованы повторно.
+                    </p>
+                  </div>
+                  <input
+                    id="factory-number-start"
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value={factoryNumberStart}
+                    onChange={(e) => setFactoryNumberStart(e.target.value)}
+                    onBlur={() => setFactoryNumberStart(Math.max(1, Number(factoryNumberStart) || 1))}
+                    className="w-full rounded-2xl border border-blue-200 bg-white p-3.5 text-right font-mono text-base font-black text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                   />
                 </div>
               </div>
