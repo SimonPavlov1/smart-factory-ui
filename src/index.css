@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.task-workspace input[type="number"] {
+  min-height: 44px;
+  border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-workspace input[type="file"] {
+  cursor: pointer;
+}
+
 :root {
   color-scheme: light;
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", sans-serif;
@@ -367,6 +388,49 @@ textarea {
 
 .theme-dark :where(.divide-slate-100 > :not([hidden]) ~ :not([hidden])) {
   border-color: var(--app-border) !important;
+}
+
+.theme-dark .testing-workspace .testing-overview {
+  background:
+    radial-gradient(circle at top right, rgba(10, 132, 255, 0.2), transparent 22rem),
+    linear-gradient(135deg, rgba(35, 38, 48, 0.98), rgba(24, 25, 31, 0.98)) !important;
+  border-color: rgba(100, 169, 255, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.theme-dark .testing-workspace :where(.bg-blue-100),
+.theme-dark .testing-workspace :where([class*="bg-blue-100/"]) {
+  background-color: rgba(10, 132, 255, 0.2) !important;
+}
+
+.theme-dark .testing-workspace :where(.bg-emerald-100),
+.theme-dark .testing-workspace :where([class*="bg-emerald-100/"]) {
+  background-color: rgba(48, 209, 88, 0.18) !important;
+}
+
+.theme-dark .testing-workspace :where(.bg-rose-100),
+.theme-dark .testing-workspace :where([class*="bg-rose-100/"]) {
+  background-color: rgba(255, 69, 58, 0.18) !important;
+}
+
+.theme-dark .testing-workspace :where(.text-blue-800, .text-blue-900) {
+  color: #8bc0ff !important;
+}
+
+.theme-dark .testing-workspace :where(.text-emerald-800, .text-emerald-900) {
+  color: #8ce99a !important;
+}
+
+.theme-dark .testing-workspace :where(.text-rose-800, .text-rose-900) {
+  color: #ff9c96 !important;
+}
+
+.theme-dark .testing-workspace .bg-blue-600 :where(.text-slate-300) {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.theme-dark .testing-workspace :where(button:disabled) {
+  opacity: 0.58;
 }
 
 @media (max-width: 1024px) {

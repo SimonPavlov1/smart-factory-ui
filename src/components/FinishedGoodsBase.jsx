@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 function hasRole(user, roles) {
   const userRoles = Array.isArray(user?.roles) && user.roles.length ? user.roles : user?.role ? [user.role] : [];
@@ -17,17 +17,17 @@ export default function FinishedGoodsBase({ user }) {
   const [error, setError] = useState("");
   const canIssue = hasRole(user, ["admin", "warehouse"]);
 
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
     const res = await fetch(`/api/inventory/finished-goods?${params.toString()}`);
     if (res.ok) setItems(await res.json());
-  };
+  }, [search]);
 
   useEffect(() => {
     const timer = setTimeout(loadItems, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [loadItems]);
 
   useEffect(() => {
     if (!selected?.product_id) return;
@@ -63,7 +63,7 @@ export default function FinishedGoodsBase({ user }) {
   };
 
   return (
-    <div className="w-full max-w-none p-4 sm:p-6 lg:p-10">
+    <div className="workspace-page finished-goods-page w-full max-w-none p-4 sm:p-6 lg:p-10">
       <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
         <p className="text-[11px] font-bold text-slate-400">Склад</p>
         <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Склад готовой продукции</h1>
@@ -85,6 +85,24 @@ export default function FinishedGoodsBase({ user }) {
           </button>
         ))}
       </div>
+      {!items.length && (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-xl text-violet-600">◇</div>
+          <h2 className="mt-4 text-base font-black text-slate-900">
+            {search.trim() ? "Ничего не найдено" : "Склад пока пуст"}
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+            {search.trim()
+              ? "Проверьте запрос или очистите строку поиска."
+              : "Готовые изделия появятся здесь после упаковки и оприходования."}
+          </p>
+          {search.trim() && (
+            <button type="button" onClick={() => setSearch("")} className="mt-5 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white">
+              Очистить поиск
+            </button>
+          )}
+        </div>
+      )}
 
       {selected && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/25 backdrop-blur-sm">

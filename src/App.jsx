@@ -1,13 +1,20 @@
-import React, { useEffect, useRef, useState } from "react";
-import Sidebar from "./components/Sidebar.jsx";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ArrowRight, ChevronLeft, ChevronRight, CircleAlert, Clock3, ListChecks, Play, Plus } from "lucide-react";
+import { CrmSidebar, CrmTopbar } from "./components/CrmNavigation.jsx";
 import GadgetsBase from "./components/GadgetsBase.jsx";
 import InventoryBase from "./components/InventoryBase.jsx";
 import FinishedGoodsBase from "./components/FinishedGoodsBase.jsx";
-import ManufacturingPage from "./components/ManufacturingPage";
+import ManufacturingPage, { CalendarField } from "./components/ManufacturingPage";
 import { clearToken, getToken, installAuthFetch, setToken } from "./api";
 import "./index.css";
+import "./app2.css";
 
 installAuthFetch();
+gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 const ROLE_LABELS = {
   admin: "Администратор",
@@ -21,11 +28,14 @@ const ROLE_LABELS = {
   repair_engineer: "Инженер-наладчик",
   packer: "Упаковщик",
   production: "Производство",
+  production_manager: "Руководитель производства",
 };
 
+const ENABLE_ASSEMBLY_PLANNING = false;
+
 const TASK_PAGE = {
-  procurement_purchase: "Все заявки",
-  accounting_payment: "Все заявки",
+  procurement_purchase: "Все задачи",
+  accounting_payment: "Все задачи",
   warehouse_receive_components: "Склад ТМЦ",
   warehouse_issue_materials: "Производство",
   repair_issue_materials: "Производство",
@@ -46,6 +56,108 @@ const TASK_STATUS_LABELS = {
   hold: "На холде",
   done: "Закрыта",
   open: "Открыта",
+  cancelled: "Отменена",
+};
+
+const TASK_UX_CONFIG = {
+  procurement_purchase: {
+    area: "Закупка",
+    purpose: "Обеспечить заказ недостающими комплектующими",
+    steps: ["Проверить дефицит и количество", "Указать поставщика, срок и документ", "Передать согласованную закупку на оплату"],
+    action: "Передать на оплату",
+    accent: "blue",
+  },
+  accounting_payment: {
+    area: "Оплата",
+    purpose: "Проверить основание и зафиксировать оплату поставщику",
+    steps: ["Сверить счёт и сумму", "Провести оплату", "Приложить платёжное поручение"],
+    action: "Подтвердить оплату",
+    accent: "violet",
+  },
+  warehouse_receive_components: {
+    area: "Приёмка",
+    purpose: "Принять фактически поступившие комплектующие",
+    steps: ["Сверить поставку с заказом", "Указать принятое количество", "Зафиксировать расхождения и завершить приёмку"],
+    action: "Оприходовать поставку",
+    accent: "cyan",
+  },
+  warehouse_issue_materials: {
+    area: "Выдача материалов",
+    purpose: "Подготовить комплектующие к передаче ответственному исполнителю",
+    steps: ["Собрать позиции по ведомости", "Проверить количество и маркировку", "Отметить комплект готовым к выдаче"],
+    action: "Готово к выдаче",
+    accent: "amber",
+  },
+  assembler_receive_materials: {
+    area: "Получение материалов",
+    purpose: "Принять комплектующие для сборки",
+    steps: ["Сверить позиции с ведомостью", "Проверить фактическое количество", "Подтвердить получение или указать расхождение"],
+    action: "Подтвердить получение",
+    accent: "amber",
+  },
+  repair_issue_materials: {
+    area: "Выдача в ремонт",
+    purpose: "Подготовить дополнительные компоненты инженеру",
+    steps: ["Проверить заявку ремонта", "Собрать запрошенные позиции", "Отметить комплект готовым к выдаче"],
+    action: "Готово к выдаче",
+    accent: "amber",
+  },
+  repair_receive_materials: {
+    area: "Получение для ремонта",
+    purpose: "Принять дополнительные компоненты для устранения дефекта",
+    steps: ["Сверить выданные позиции", "Проверить количество", "Подтвердить получение"],
+    action: "Подтвердить получение",
+    accent: "amber",
+  },
+  assembler_build: {
+    area: "Сборка",
+    purpose: "Зафиксировать выпуск и передать готовые единицы на тестирование",
+    steps: ["Выбрать устройства из общего пула", "Отметить собранные заводские номера", "Передать собранные изделия на тестирование"],
+    action: "Передать на тестирование",
+    accent: "blue",
+  },
+  assembly_planning: {
+    area: "Планирование производства",
+    purpose: "Показать, как план выпуска распределён между сборщиками",
+    steps: ["Сверить общий план изделия", "Проверить назначенные партии и сроки", "Контролировать выполнение дочерних задач"],
+    action: "Распределение завершено",
+    accent: "blue",
+  },
+  tester_check: {
+    area: "Контроль качества",
+    purpose: "Проверить изделия и отделить годные от дефектных",
+    steps: ["Пройти контрольный чек-лист", "Указать количество годных и дефектных", "Передать годные на упаковку, дефектные — в ремонт"],
+    action: "Завершить проверку",
+    accent: "emerald",
+  },
+  repair_defects: {
+    area: "Ремонт",
+    purpose: "Устранить выявленные дефекты и вернуть изделие на повторный тест",
+    steps: ["Изучить описание дефекта", "Зафиксировать выполненные работы и компоненты", "Передать изделие на повторную проверку"],
+    action: "Передать на повторный тест",
+    accent: "rose",
+  },
+  packer_pack: {
+    area: "Упаковка",
+    purpose: "Упаковать проверенные изделия и подготовить их к сдаче",
+    steps: ["Сверить количество годных изделий", "Проверить комплектность упаковки", "Указать фактически упакованное количество"],
+    action: "Передать на склад готовой продукции",
+    accent: "violet",
+  },
+  warehouse_finished_goods: {
+    area: "Склад готовой продукции",
+    purpose: "Принять готовые изделия и увеличить складской остаток",
+    steps: ["Сверить изделия и количество", "Проверить упаковку и маркировку", "Оприходовать фактически принятые изделия"],
+    action: "Оприходовать изделия",
+    accent: "emerald",
+  },
+  manual: {
+    area: "Ручная задача",
+    purpose: "Выполнить описанную работу и зафиксировать результат",
+    steps: ["Изучить описание и зависимости", "Выполнить работу", "Добавить результат в комментарий и завершить задачу"],
+    action: "Завершить задачу",
+    accent: "slate",
+  },
 };
 
 const TASK_KANBAN_COLUMNS = [
@@ -56,14 +168,6 @@ const TASK_KANBAN_COLUMNS = [
   { key: "delayed", title: "Задержка", description: "Плановая дата уже прошла" },
   { key: "done", title: "Готово", description: "Закрытые за последние 24 часа" },
 ];
-
-function isPastDate(value) {
-  if (!value) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const date = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(date.getTime()) && date < today;
-}
 
 function taskExpectedDates(task) {
   const payload = task.payload || {};
@@ -76,21 +180,22 @@ function taskExpectedDates(task) {
 
 function taskDisplayStatus(task) {
   const expectedDates = taskExpectedDates(task);
-  if (task.status !== "done" && expectedDates.some(isPastDate)) return "Задержка поставки";
+  if (task.is_overdue) return "Просрочена";
   if (task.status !== "done" && task.type === "warehouse_receive_components" && expectedDates.length > 0) return "Ожидание комплектующих";
   return TASK_STATUS_LABELS[task.status] || task.status;
 }
 
 function taskStatusClass(task) {
+  if (task.status === "cancelled") return "bg-rose-50 text-rose-700 border-rose-100";
   if (task.status === "hold") return "bg-amber-50 text-amber-700 border-amber-100";
-  return taskDisplayStatus(task) === "Задержка поставки"
+  return task.is_overdue
     ? "bg-red-50 text-red-700 border-red-100"
     : "bg-blue-50 text-blue-600 border-blue-100";
 }
 
 function taskKanbanColumn(task) {
   const displayStatus = taskDisplayStatus(task);
-  if (displayStatus === "Задержка поставки") return "delayed";
+  if (task.is_overdue) return "delayed";
   if (displayStatus === "Ожидание комплектующих") return "waiting_delivery";
   if (task.status === "open" || task.status === "assigned") return "assigned";
   if (task.status === "hold") return "hold";
@@ -101,7 +206,7 @@ function taskKanbanColumn(task) {
 }
 
 function canManageTasks(user) {
-  return userHasRole(user, ["admin", "manager"]);
+  return userHasRole(user, ["admin", "manager", "production_manager"]);
 }
 
 function userRoles(user) {
@@ -167,6 +272,12 @@ function defaultCompletionPayload(task) {
   }
   if (task.type === "assembler_build") {
     const context = task.payload?.product_context || {};
+    const serialStatuses = task.payload?.serial_number_statuses || {};
+    const transferredSerials = new Set(task.payload?.transferred_serial_numbers || []);
+    const assembledSerialNumbers = (task.payload?.serial_numbers || []).filter((serialNumber) => (
+      transferredSerials.has(serialNumber)
+      || ["assembled", "testing", "passed", "repair", "packed", "stocked"].includes(serialStatuses[serialNumber])
+    ));
     const assignments = (task.payload?.assembly_assignments?.length ? task.payload.assembly_assignments : [{
       id: "default",
       product_id: context.product_id,
@@ -189,6 +300,7 @@ function defaultCompletionPayload(task) {
       assembled_qty: "",
       daily_qty: "",
       daily_comment: "",
+      assembled_serial_numbers: assembledSerialNumbers,
       assembly_assignments: assignments,
       daily_entries: assignments.map((item) => ({
         assignment_id: item.id,
@@ -205,25 +317,47 @@ function defaultCompletionPayload(task) {
     const productLines = task.payload?.pending_product_lines?.length
       ? task.payload.pending_product_lines
       : (task.payload?.product_lines || []);
+    const totalQty = productLines.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+    const checklist = (task.payload?.test_checklist || productLines[0]?.test_checklist || []).map((item, index) => ({
+      id: item.id || `check-${index + 1}`,
+      label: item.label || String(item),
+      checked: null,
+    }));
     return {
-      passed_qty: "",
+      passed_qty: totalQty ? String(totalQty) : "",
       defective_qty: "0",
       notes: "",
+      defective_serial_numbers: [],
       defective_products: productLines.map((item) => ({
         product_id: item.product_id,
         product_name: item.product_name,
         drawing_number: item.drawing_number,
         defective_qty: "",
       })),
-      test_checklist: (task.payload?.test_checklist || task.payload?.product_lines?.[0]?.test_checklist || []).map((item, index) => ({
-        id: item.id || `check-${index + 1}`,
-        label: item.label || String(item),
-        checked: Boolean(item.checked),
+      test_checklist: checklist,
+      serial_test_results: (task.payload?.pending_serial_numbers || task.payload?.serial_numbers || []).map((serialNumber) => ({
+        serial_number: serialNumber,
+        reviewed: false,
+        checklist: checklist.map((item) => ({ ...item })),
       })),
     };
   }
-  if (task.type === "repair_defects") return { notes: "", extra_components: [] };
-  if (task.type === "packer_pack") return { packed_qty: "" };
+  if (task.type === "repair_defects") {
+    const serialNumbers = task.payload?.serial_defects?.map((item) => item.serial_number)
+      || task.payload?.serial_numbers
+      || [];
+    return {
+      notes: "",
+      extra_components: [],
+      serial_repair_results: serialNumbers.map((serialNumber) => ({
+        serial_number: serialNumber,
+        work_done: "",
+      })),
+    };
+  }
+  if (task.type === "packer_pack") {
+    return { packed_qty: "0", packed_serial_numbers: [] };
+  }
   if (task.type === "accounting_payment") return { payment_ref: "", payment_order_file: null, payment_order_file_name: "", notes: "" };
   if (task.type === "warehouse_finished_goods") {
     const finishedGoods = task.payload?.pending_product_lines?.length
@@ -241,15 +375,35 @@ function defaultCompletionPayload(task) {
 }
 
 function PayloadField({ label, name, value, onChange, type = "text" }) {
+  const isComment = ["comment", "notes", "daily_comment"].includes(name);
+  const controlClass = "min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50 disabled:text-slate-400";
   return (
     <label className="block">
-      <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</span>
-      <input
-        type={type}
-        value={value || ""}
-        onChange={(e) => onChange(name, e.target.value)}
-        className="w-full p-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500"
-      />
+      <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span>
+      {isComment ? (
+        <textarea
+          value={value ?? ""}
+          onChange={(e) => onChange(name, e.target.value)}
+          className={`${controlClass} min-h-24 resize-y py-3`}
+        />
+      ) : type === "number" ? (
+        <span className="relative block">
+          <input
+            type="number"
+            value={value ?? ""}
+            onChange={(e) => onChange(name, e.target.value)}
+            className={`${controlClass} pr-11 text-right text-base font-black`}
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">шт.</span>
+        </span>
+      ) : (
+        <input
+          type={type}
+          value={value ?? ""}
+          onChange={(e) => onChange(name, e.target.value)}
+          className={controlClass}
+        />
+      )}
     </label>
   );
 }
@@ -257,6 +411,158 @@ function PayloadField({ label, name, value, onChange, type = "text" }) {
 function componentTitle(item) {
   const details = [item.part_number, item.value, item.package].filter(Boolean).join(" · ");
   return details ? `${item.component_name || `Компонент ID ${item.component_id}`} (${details})` : item.component_name || `Компонент ID ${item.component_id}`;
+}
+
+function uniqueDesignators(value) {
+  const seen = new Set();
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (!item || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(", ");
+}
+
+function groupComponentsByDevice(components) {
+  const devices = [];
+  const deviceIndexes = new Map();
+
+  components.forEach((component) => {
+    const deviceName = String(component.device || "Устройство не указано").trim();
+    const assemblyName = String(component.assembly || "Основной состав").trim();
+    let deviceGroup = devices[deviceIndexes.get(deviceName)];
+
+    if (!deviceGroup) {
+      deviceGroup = { name: deviceName, assemblies: [], assemblyIndexes: new Map() };
+      deviceIndexes.set(deviceName, devices.length);
+      devices.push(deviceGroup);
+    }
+
+    let assemblyGroup = deviceGroup.assemblies[deviceGroup.assemblyIndexes.get(assemblyName)];
+    if (!assemblyGroup) {
+      assemblyGroup = { name: assemblyName, components: [] };
+      deviceGroup.assemblyIndexes.set(assemblyName, deviceGroup.assemblies.length);
+      deviceGroup.assemblies.push(assemblyGroup);
+    }
+
+    assemblyGroup.components.push(component);
+  });
+
+  return devices;
+}
+
+function ComponentSearchResults({ matches, onSelect }) {
+  const deviceGroups = groupComponentsByDevice(matches);
+
+  return (
+    <div className="max-h-64 overflow-y-auto rounded-xl border border-blue-100 bg-white shadow-xl shadow-blue-900/10">
+      {deviceGroups.map((deviceGroup) => (
+        <section key={deviceGroup.name} className="border-b border-blue-100 last:border-b-0">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/95 px-3 py-2 backdrop-blur">
+            <span className="min-w-0 truncate text-xs font-black text-blue-700">{deviceGroup.name}</span>
+            <span className="shrink-0 text-[10px] font-bold text-blue-500">
+              {deviceGroup.assemblies.reduce((total, group) => total + group.components.length, 0)} поз.
+            </span>
+          </div>
+          {deviceGroup.assemblies.map((assemblyGroup) => (
+            <div key={`${deviceGroup.name}-${assemblyGroup.name}`}>
+              <div className="border-b border-slate-100 bg-slate-50/90 px-3 py-1.5 text-[10px] font-black text-slate-500">
+                {assemblyGroup.name}
+              </div>
+              {assemblyGroup.components.map((component) => (
+                <button
+                  key={`${deviceGroup.name}-${assemblyGroup.name}-${component.component_id}`}
+                  type="button"
+                  onClick={() => onSelect(component)}
+                  className="group block w-full border-b border-slate-100 px-3 py-2.5 text-left text-xs transition last:border-b-0 hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                >
+                  <span className="block font-black text-slate-800 transition-colors group-hover:text-blue-700">
+                    {component.designators ? `${uniqueDesignators(component.designators)} · ` : ""}{component.component_name}
+                  </span>
+                  <span className="mt-0.5 block font-semibold text-slate-400">
+                    {[component.part_number, component.value, component.package, component.category].filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function ComponentSearchField({ value, onChange, matches, onSelect, placeholder, className }) {
+  const inputRef = useRef(null);
+  const [focused, setFocused] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0, width: 320 });
+
+  const updatePopoverPosition = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewportGap = 12;
+    const width = Math.min(Math.max(rect.width, 480), window.innerWidth - viewportGap * 2);
+    const left = Math.min(Math.max(viewportGap, rect.left), window.innerWidth - width - viewportGap);
+    const estimatedHeight = 300;
+    const top = rect.bottom + estimatedHeight <= window.innerHeight - viewportGap
+      ? rect.bottom + 8
+      : Math.max(viewportGap, rect.top - estimatedHeight - 8);
+    setPopoverPosition({ top, left, width });
+  }, []);
+
+  useEffect(() => {
+    if (!focused) return undefined;
+    const reposition = () => updatePopoverPosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [focused, updatePopoverPosition]);
+
+  const showResults = focused && matches.length > 0;
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          updatePopoverPosition();
+        }}
+        onFocus={() => {
+          updatePopoverPosition();
+          setFocused(true);
+        }}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        className={className}
+        autoComplete="off"
+      />
+      {showResults && createPortal(
+        <div
+          className="fixed z-[100]"
+          style={{ top: popoverPosition.top, left: popoverPosition.left, width: popoverPosition.width }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <ComponentSearchResults
+            matches={matches}
+            onSelect={(component) => {
+              setFocused(false);
+              onSelect(component);
+            }}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
 }
 
 function lineProductLabel(item) {
@@ -305,6 +611,25 @@ function assigneeName(task) {
   return task.assigned_user.full_name || task.assigned_user.username;
 }
 
+function personInitials(person) {
+  const name = person?.full_name || person?.username || "";
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function PersonnelAvatar({ user, size = "md" }) {
+  return (
+    <div className={`${size === "lg" ? "h-14 w-14 text-lg" : "h-12 w-12 text-base"} flex shrink-0 items-center justify-center rounded-full bg-[#6558e8] font-black text-white shadow-sm shadow-violet-500/20`}>
+      {personInitials(user)}
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   onOpenTask,
@@ -318,6 +643,17 @@ function TaskCard({
   isDragging = false,
   dropPlacement = "",
 }) {
+  const dueValue = task.effective_deadline || task.due_date || task.sla_due_at;
+  const dueDate = dueValue ? new Date(dueValue) : null;
+  const hasDueDate = dueDate && !Number.isNaN(dueDate.getTime());
+  const overdue = task.status !== "done" && hasDueDate && dueDate < new Date();
+  const priorityLabel = {
+    critical: "Критический",
+    high: "Высокий",
+    normal: "Обычный",
+    low: "Низкий",
+  }[task.priority];
+
   return (
     <div
       draggable={draggable}
@@ -325,11 +661,11 @@ function TaskCard({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`relative flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm transition-all ${
+      className={`task-work-card relative flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm transition-all ${
         compact ? "gap-3 p-4" : "gap-4 p-5"
       } ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${isDragging ? "scale-[0.98] opacity-50" : ""}`}
+      } ${isDragging ? "scale-[0.98] opacity-50" : ""} ${overdue ? "is-overdue" : ""}`}
     >
       {dropPlacement === "before" && (
         <div className="absolute -top-2 left-4 right-4 z-20 h-1 rounded-full bg-[#3F8CFF] shadow-[0_0_0_4px_rgba(63,140,255,0.14)]" />
@@ -339,25 +675,389 @@ function TaskCard({
       )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            Заказ #{task.order_id || "—"} · {ROLE_LABELS[task.role] || task.role}
+          <div className="task-work-context">
+            <span>{task.order_id ? `Заказ #${task.order_id}` : "Без заказа"}</span>
+            <span>{ROLE_LABELS[task.role] || task.role}</span>
           </div>
-          <h3 className={`${compact ? "line-clamp-2" : ""} mt-1 break-words text-sm font-black leading-snug text-slate-900`}>{task.title}</h3>
-          <div className="text-[11px] text-slate-400 mt-1">Исполнитель: {assigneeName(task)}</div>
+          <h3 className={`${compact ? "line-clamp-3" : ""} task-work-title`}>{task.title}</h3>
         </div>
-        <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg border ${taskStatusClass(task)}`}>
+        <span className={`task-work-status shrink-0 border ${taskStatusClass(task)}`}>
           {taskDisplayStatus(task)}
         </span>
       </div>
-      {!compact && <p className="text-xs text-slate-500 leading-relaxed">{task.description}</p>}
+      {!compact && task.description && <p className="task-work-description">{task.description}</p>}
       {task.payload?.shortages?.length > 0 && (
-        <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-[11px] text-red-700">
-          Дефицит: {task.payload.shortages.length} поз.
+        <div className="task-work-alert">
+          <CircleAlert size={14} /> Дефицит: {task.payload.shortages.length} поз.
         </div>
       )}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-        <button onClick={() => onOpen(TASK_PAGE[task.type] || "Мои задачи")} className="text-xs font-bold text-blue-600 hover:text-blue-700">Открыть раздел</button>
-        <button onClick={() => onOpenTask(task.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-700">Открыть задачу</button>
+      <div className="task-work-meta">
+        <span className={overdue ? "danger" : ""}>
+          <Clock3 size={14} />
+          {hasDueDate ? dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" }) : "Без срока"}
+        </span>
+        <span>{assigneeName(task)}</span>
+        {priorityLabel && task.priority !== "normal" && <span className={`priority-${task.priority}`}>{priorityLabel}</span>}
+      </div>
+      <div className="task-work-actions">
+        {!compact && <button onClick={() => onOpen(TASK_PAGE[task.type] || "Мои задачи")}>Открыть раздел</button>}
+        <button onClick={() => onOpenTask(task.id)} className="task-work-primary">
+          Открыть <ArrowRight size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const CANCELLATION_TASK_CONFIG = {
+  cancellation_release_reservations: {
+    title: "Снять резерв материалов",
+    steps: ["Проверьте остатки резерва по заказу.", "Убедитесь, что материалы физически не переданы в производство.", "Снимите резерв и верните доступное количество на склад."],
+    decisions: [["released", "Резерв снят", "Материалы снова доступны для других заказов."]],
+  },
+  cancellation_procurement_commitments: {
+    title: "Урегулировать закупку",
+    steps: ["Свяжитесь с поставщиком и проверьте возможность отмены.", "Если отмена невозможна — подтвердите приёмку поставки.", "Зафиксируйте финансовые последствия и договорённости."],
+    decisions: [["cancelled", "Закупка отменена", "Поставщик подтвердил отмену."], ["accepted_delivery", "Поставку принимаем", "Товар поступит на склад для дальнейшего использования."]],
+  },
+  cancellation_financial_commitments: {
+    title: "Закрыть финансовые обязательства",
+    steps: ["Проверьте выставленные счета и проведённые оплаты.", "Зафиксируйте возврат, удержание или неизбежные расходы.", "Укажите финансовое влияние отмены."],
+    decisions: [["cancelled", "Обязательства закрыты", "Оплата отменена или возвращена."], ["accepted_delivery", "Расход остаётся", "Оплату или удержание невозможно отменить."]],
+  },
+  cancellation_issued_materials: {
+    title: "Сверить выданные материалы",
+    steps: ["Получите у исполнителя фактический остаток.", "Отделите использованные, пригодные и повреждённые материалы.", "Верните пригодное на склад и зафиксируйте расхождения."],
+    decisions: [["returned", "Материалы возвращены", "Пригодные остатки возвращены на склад."], ["scrap", "Материалы списаны", "Возврат невозможен, требуется списание."]],
+  },
+  cancellation_wip_disposition: {
+    title: "Принять решение по незавершённому изделию",
+    steps: ["Оцените степень готовности и стоимость продолжения.", "Проверьте возможность повторного использования комплектующих.", "Выберите экономически обоснованный вариант."],
+    decisions: [["complete", "Завершить сборку", "Изделие будет закончено и оприходовано."], ["disassemble", "Разобрать изделие", "Пригодные компоненты вернутся на склад."], ["scrap", "Списать", "Изделие или материалы будут списаны."]],
+  },
+  cancellation_stop_confirmation: {
+    title: "Подтвердить остановку заказа",
+    steps: ["Убедитесь, что активных закупок и выдач нет.", "Проверьте, что производство фактически не начато.", "Подтвердите безопасную остановку заказа."],
+    decisions: [["stopped", "Работы остановлены", "Заказ можно окончательно закрыть."]],
+  },
+};
+
+function CancellationTaskModal({ task, onClose, onChanged, reload }) {
+  const config = CANCELLATION_TASK_CONFIG[task.type] || CANCELLATION_TASK_CONFIG.cancellation_stop_confirmation;
+  const [decision, setDecision] = useState("");
+  const [note, setNote] = useState("");
+  const [quantityReturned, setQuantityReturned] = useState("");
+  const [quantityUsed, setQuantityUsed] = useState("");
+  const [quantityDamaged, setQuantityDamaged] = useState("");
+  const [financialImpact, setFinancialImpact] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const obligationId = task.payload?.cancellation_obligation_id;
+  const resolution = task.payload?.resolution;
+  const completed = task.status === "done";
+
+  const submit = async () => {
+    if (!decision || !obligationId || !task.order_id) return;
+    setSaving(true);
+    setError("");
+    const res = await fetch(`/api/manufacturing/orders/${task.order_id}/cancellation/obligations/${obligationId}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        decision,
+        note: note.trim() || null,
+        quantity_returned: quantityReturned === "" ? null : Number(quantityReturned),
+        quantity_used: quantityUsed === "" ? null : Number(quantityUsed),
+        quantity_damaged: quantityDamaged === "" ? null : Number(quantityDamaged),
+        financial_impact: financialImpact === "" ? null : Number(financialImpact),
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail || "Не удалось зафиксировать решение");
+      return;
+    }
+    await onChanged();
+    await reload();
+  };
+
+  const inputClass = "min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10";
+
+  return (
+    <div className="task-fullscreen-shell fixed inset-0 z-50 h-[100dvh] bg-white">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+        <div className="flex shrink-0 items-start justify-between gap-5 border-b border-slate-100 p-5 sm:px-8 sm:py-6">
+          <div>
+            <div className="text-xs font-black text-blue-600">Отмена заказа #{task.order_id} · Задача #{task.id}</div>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{config.title}</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">Ответственный отдел: {ROLE_LABELS[task.role] || task.role} · Исполнитель: {assigneeName(task)}</p>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-xl font-bold text-slate-500">×</button>
+        </div>
+
+        <div className="w-full max-w-none flex-1 overflow-y-auto p-5 sm:p-8">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+              <h3 className="text-base font-black text-slate-900">Что нужно сделать</h3>
+              <ol className="mt-4 space-y-4">
+                {config.steps.map((step, index) => (
+                  <li className="flex gap-3 text-sm font-medium leading-6 text-slate-600" key={step}>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">{index + 1}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs font-semibold leading-5 text-amber-900">
+                Задача завершится только после фиксации решения. Событие сохранится в журнале заказа.
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-base font-black text-slate-900">{completed ? "Зафиксированное решение" : "Результат проверки"}</h3>
+              {completed ? (
+                <div className="mt-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+                  <div className="text-lg font-black text-emerald-900">{config.decisions.find(([value]) => value === resolution?.decision)?.[1] || "Решение принято"}</div>
+                  {resolution?.note && <p className="mt-2 text-sm font-medium text-emerald-800">{resolution.note}</p>}
+                  <div className="mt-4 text-xs font-bold text-emerald-700">Задача выполнена</div>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 grid grid-flow-dense grid-cols-1 gap-3 sm:grid-cols-2">
+                    {config.decisions.map(([value, title, description]) => (
+                      <button type="button" key={value} onClick={() => setDecision(value)} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${decision === value ? "border-blue-400 bg-blue-50 ring-4 ring-blue-500/10" : "border-slate-200"}`}>
+                        <strong className="text-sm font-black text-slate-900">{title}</strong>
+                        <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">{description}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {["cancellation_issued_materials", "cancellation_wip_disposition"].includes(task.type) && (
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <label><span className="mb-1 block text-xs font-bold text-slate-500">Возвращено</span><input type="number" min="0" value={quantityReturned} onChange={(e) => setQuantityReturned(e.target.value)} className={inputClass} /></label>
+                      <label><span className="mb-1 block text-xs font-bold text-slate-500">Использовано</span><input type="number" min="0" value={quantityUsed} onChange={(e) => setQuantityUsed(e.target.value)} className={inputClass} /></label>
+                      <label><span className="mb-1 block text-xs font-bold text-slate-500">Повреждено</span><input type="number" min="0" value={quantityDamaged} onChange={(e) => setQuantityDamaged(e.target.value)} className={inputClass} /></label>
+                    </div>
+                  )}
+                  {["cancellation_procurement_commitments", "cancellation_financial_commitments"].includes(task.type) && (
+                    <label className="mt-4 block"><span className="mb-1 block text-xs font-bold text-slate-500">Финансовые последствия, ₽</span><input type="number" min="0" step="0.01" value={financialImpact} onChange={(e) => setFinancialImpact(e.target.value)} className={inputClass} /></label>
+                  )}
+                  <label className="mt-4 block"><span className="mb-1 block text-xs font-bold text-slate-500">Комментарий и подтверждающие детали</span><textarea value={note} onChange={(e) => setNote(e.target.value)} className={`${inputClass} min-h-24 py-3`} placeholder="Что проверили и почему выбрали это решение" /></label>
+                  {error && <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white p-4 sm:px-8 sm:py-5">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600">Закрыть</button>
+          {!completed && <button type="button" disabled={!decision || saving} onClick={submit} className="min-h-11 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white disabled:bg-slate-300">{saving ? "Сохраняем..." : "Завершить задачу"}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function buildAutomaticAssemblyAllocations(productLines, assemblers, dueDate) {
+  const deadline = dueDate ? String(dueDate).slice(0, 10) : "";
+
+  if (!assemblers.length) {
+    return productLines.map((line, lineIndex) => ({
+      id: `unassigned-${line.order_item_id || line.product_id || lineIndex}`,
+      order_item_id: line.order_item_id || null,
+      product_id: line.product_id || null,
+      product_name: line.product_name || "Изделие",
+      user_id: "",
+      quantity: Number(line.qty || 0) || "",
+      due_date: deadline,
+    }));
+  }
+
+  return productLines.flatMap((line, lineIndex) => {
+    const quantity = Math.max(0, Math.floor(Number(line.qty || 0)));
+    const baseQuantity = Math.floor(quantity / assemblers.length);
+    const remainder = quantity % assemblers.length;
+
+    return assemblers.flatMap((assembler, assemblerIndex) => {
+      const assignedQuantity = baseQuantity + (assemblerIndex < remainder ? 1 : 0);
+      if (!assignedQuantity) return [];
+      return [{
+        id: `auto-${line.order_item_id || line.product_id || lineIndex}-${assembler.id}`,
+        order_item_id: line.order_item_id || null,
+        product_id: line.product_id || null,
+        product_name: line.product_name || "Изделие",
+        user_id: assembler.id,
+        quantity: assignedQuantity,
+        due_date: deadline,
+      }];
+    });
+  });
+}
+
+function russianCountLabel(count, one, few, many) {
+  const value = Math.abs(Number(count)) % 100;
+  const lastDigit = value % 10;
+  if (value > 10 && value < 20) return many;
+  if (lastDigit === 1) return one;
+  if (lastDigit >= 2 && lastDigit <= 4) return few;
+  return many;
+}
+
+function AssemblyPlanningModal({ task, users, onClose, onChanged }) {
+  const productLines = task.payload?.product_lines || [task.payload?.product_context].filter(Boolean);
+  const assemblers = users.filter((item) => userHasRole(item, ["assembler"]));
+  const automaticAllocations = buildAutomaticAssemblyAllocations(productLines, assemblers, task.due_date);
+  const [manualAllocations, setManualAllocations] = useState(null);
+  const allocations = manualAllocations ?? automaticAllocations;
+  const [openRowId, setOpenRowId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const updateAllocations = (updater) => setManualAllocations((current) => updater(current ?? automaticAllocations));
+  const change = (id, patch) => updateAllocations((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const addRow = (line = productLines[0]) => updateAllocations((current) => [...current, {
+    id: crypto.randomUUID(),
+    order_item_id: line?.order_item_id || null,
+    product_id: line?.product_id || null,
+    product_name: line?.product_name || "Изделие",
+    user_id: "",
+    quantity: "",
+    due_date: task.due_date ? String(task.due_date).slice(0, 10) : "",
+  }]);
+
+  const totals = allocations.reduce((result, item) => {
+    const key = item.order_item_id || item.product_id;
+    result[key] = (result[key] || 0) + Number(item.quantity || 0);
+    return result;
+  }, {});
+
+  const submit = async () => {
+    if (allocations.some((item) => !item.user_id || Number(item.quantity || 0) <= 0)) {
+      setError("Для каждой партии выберите сборщика и количество");
+      return;
+    }
+    const incompleteLine = productLines.find((line) => {
+      const key = line.order_item_id || line.product_id;
+      return Number(totals[key] || 0) !== Number(line.qty || 0);
+    });
+    if (incompleteLine) {
+      setError(`Распределите все изделия «${incompleteLine.product_name || "Изделие"}»: сейчас ${totals[incompleteLine.order_item_id || incompleteLine.product_id] || 0} из ${incompleteLine.qty || 0} шт.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const res = await fetch(`/api/tasks/${task.id}/assembly-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        allocations: allocations.map(({ user_id, quantity, order_item_id, product_id, due_date }) => ({
+          user_id: Number(user_id),
+          quantity: Number(quantity),
+          order_item_id,
+          product_id,
+          due_date: due_date || null,
+        })),
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail || "Не удалось распределить сборку");
+      return;
+    }
+    await onChanged();
+    onClose();
+  };
+
+  return (
+    <div className="task-fullscreen-shell fixed inset-0 z-50 h-[100dvh] bg-white">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+        <div className="flex shrink-0 items-start justify-between gap-5 border-b border-slate-100 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.11),transparent_45%)] p-5 sm:px-8 sm:py-6">
+          <div>
+            <div className="text-xs font-bold text-blue-600">Заказ #{task.order_id} · план сборки</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">Распределить изделия между сборщиками</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">После подтверждения появится общая очередь, а заводские номера будут первоначально закреплены за выбранными сборщиками.</p>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl text-slate-500">×</button>
+        </div>
+        <div className="w-full max-w-none flex-1 overflow-y-auto p-5 sm:p-8">
+          <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${assemblers.length ? "border-blue-100 bg-blue-50/70" : "border-amber-200 bg-amber-50"}`}>
+            <div>
+              <div className={`text-sm font-black ${assemblers.length ? "text-blue-950" : "text-amber-950"}`}>
+                {assemblers.length ? "План уже сформирован автоматически" : "Нет доступных сборщиков"}
+              </div>
+              <div className={`mt-1 text-xs font-semibold ${assemblers.length ? "text-blue-700" : "text-amber-800"}`}>
+                {assemblers.length
+                  ? `${assemblers.length} ${russianCountLabel(assemblers.length, "сборщик", "сборщика", "сборщиков")} · ${allocations.length} ${russianCountLabel(allocations.length, "назначение", "назначения", "назначений")} · остаток распределён по одному изделию`
+                  : "Добавьте активному сотруднику роль сборщика и снова откройте задачу."}
+              </div>
+            </div>
+            {assemblers.length > 0 && (
+              <button type="button" onClick={() => { setManualAllocations(null); setError(""); }} className="min-h-10 shrink-0 rounded-xl border border-blue-200 bg-white px-4 text-sm font-black text-blue-700 transition hover:border-blue-300 hover:shadow-sm">
+                Распределить заново
+              </button>
+            )}
+          </div>
+          <div className="mb-5 grid grid-flow-dense grid-cols-1 gap-3 md:grid-cols-3">
+            {productLines.map((line) => {
+              const key = line.order_item_id || line.product_id;
+              const planned = Number(line.qty || 0);
+              const distributed = Number(totals[key] || 0);
+              return (
+                <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="truncate text-sm font-black text-slate-900">{line.product_name || "Изделие"}</div>
+                  <div className="mt-2 text-xs font-semibold text-slate-500">Распределено {distributed} из {planned} шт.</div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white"><div className={`h-full rounded-full ${distributed > planned ? "bg-rose-500" : "bg-blue-500"}`} style={{ width: `${Math.min(planned ? distributed / planned * 100 : 0, 100)}%` }} /></div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="space-y-3">
+            {allocations.map((allocation) => (
+              <div key={allocation.id} className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_240px_130px_170px_40px] md:items-end">
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Изделие</span>
+                  <select
+                    value={allocation.order_item_id || allocation.product_id || ""}
+                    onChange={(e) => {
+                      const line = productLines.find((item) => String(item.order_item_id || item.product_id) === e.target.value);
+                      if (line) change(allocation.id, { order_item_id: line.order_item_id || null, product_id: line.product_id || null, product_name: line.product_name });
+                    }}
+                    className="min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700"
+                  >
+                    {productLines.map((line) => <option key={line.order_item_id || line.product_id} value={line.order_item_id || line.product_id}>{line.product_name}</option>)}
+                  </select>
+                </label>
+                <div className="relative">
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Сборщик</span>
+                  <button type="button" onClick={() => setOpenRowId(openRowId === allocation.id ? null : allocation.id)} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700">
+                    <span className="truncate">{assemblers.find((item) => Number(item.id) === Number(allocation.user_id))?.full_name || "Выбрать сборщика"}</span>
+                    <span>⌄</span>
+                  </button>
+                  {openRowId === allocation.id && <div className="absolute z-30 mt-2 max-h-52 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                    {assemblers.map((item) => <button type="button" key={item.id} onClick={() => { change(allocation.id, { user_id: item.id }); setOpenRowId(null); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-blue-50"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-[10px] text-white">{personInitials(item)}</span>{item.full_name || item.username}</button>)}
+                  </div>}
+                </div>
+                <label><span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Количество</span><input type="number" min="1" value={allocation.quantity} onChange={(e) => change(allocation.id, { quantity: e.target.value })} className="min-h-11 w-full rounded-xl border border-slate-200 px-3 text-right text-base font-black" /></label>
+                <label className="min-w-0">
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Срок</span>
+                  <CalendarField
+                    value={allocation.due_date}
+                    onChange={(value) => change(allocation.id, { due_date: value })}
+                    className="min-w-0"
+                  />
+                </label>
+                <button type="button" disabled={allocations.length === 1} onClick={() => updateAllocations((current) => current.filter((item) => item.id !== allocation.id))} className="flex h-10 w-10 items-center justify-center rounded-xl border border-rose-100 text-rose-500 disabled:opacity-30">×</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => addRow()} className="mt-4 min-h-10 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-black text-blue-700">Добавить партию</button>
+          {error && <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 p-5">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-600">Отмена</button>
+          <button type="button" onClick={submit} disabled={saving} className="min-h-11 rounded-xl bg-blue-600 px-6 text-sm font-black text-white disabled:bg-slate-300">{saving ? "Создаём очередь..." : "Сформировать общую очередь"}</button>
+        </div>
       </div>
     </div>
   );
@@ -373,24 +1073,65 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [assemblyTab, setAssemblyTab] = useState("work");
+  const [assemblySerialSearch, setAssemblySerialSearch] = useState("");
+  const [assemblySerialsExpanded, setAssemblySerialsExpanded] = useState(false);
+  const [assemblySerialFilter, setAssemblySerialFilter] = useState("my");
+  const [testingStep, setTestingStep] = useState("checklist");
+  const [serialSearch, setSerialSearch] = useState("");
+  const [activeTestSerial, setActiveTestSerial] = useState("");
+  const [repairTab, setRepairTab] = useState("devices");
+  const [activeRepairSerial, setActiveRepairSerial] = useState("");
+  const [packingSerialSearch, setPackingSerialSearch] = useState("");
 
-  const load = async () => {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  const load = useCallback(async () => {
     const res = await fetch(`/api/tasks/${taskId}`);
     if (res.ok) {
       const data = await res.json();
       setTask(data);
+      if (data.type === "assembler_build") {
+        setAssemblySerialSearch("");
+        setAssemblySerialsExpanded(false);
+      }
+      if (data.type === "tester_check") {
+        setTestingStep("checklist");
+        setSerialSearch("");
+        const myClaimedSerials = (data.payload?.pending_serial_numbers || []).filter((serialNumber) => (
+          Number(data.payload?.testing_claims?.[serialNumber]) === Number(user?.id)
+        ));
+        setActiveTestSerial(myClaimedSerials[0] || "");
+      }
+      if (data.type === "repair_defects") {
+        setRepairTab("devices");
+        setActiveRepairSerial(data.payload?.serial_defects?.[0]?.serial_number || data.payload?.serial_numbers?.[0] || "");
+      }
+      if (data.type === "packer_pack") setPackingSerialSearch("");
       setCompletionPayload(
         data.type === "assembler_build"
           ? defaultCompletionPayload(data)
           : { ...defaultCompletionPayload(data), ...(data.payload?.completion || {}) }
       );
     }
-  };
+  }, [taskId, user?.id]);
 
   useEffect(() => {
     completionKeyRef.current = null;
-    load();
-  }, [taskId]);
+    queueMicrotask(load);
+  }, [load]);
 
   useEffect(() => {
     const loadBomOptions = async () => {
@@ -425,8 +1166,15 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       setBomComponentOptions(Object.values(optionsById).sort((a, b) => `${a.category || ""}${a.component_name}`.localeCompare(`${b.category || ""}${b.component_name}`)));
     };
     loadBomOptions();
-  }, [task?.id, task?.type, task?.order_id]);
+  }, [
+    task?.id,
+    task?.type,
+    task?.order_id,
+    task?.payload?.component_options?.length,
+    task?.payload?.product_context?.product_id,
+  ]);
 
+  const userRolesKey = JSON.stringify(user?.roles || []);
   useEffect(() => {
     const loadUsers = async () => {
       if (!task || (!canManageTasks(user) && task.type !== "assembler_build")) return;
@@ -435,7 +1183,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       if (res.ok) setUsers(await res.json());
     };
     loadUsers();
-  }, [task?.id, task?.role, user?.role, JSON.stringify(user?.roles || [])]);
+  }, [task, user, userRolesKey]);
 
   const changePayload = (name, value) => {
     setCompletionPayload((current) => ({ ...current, [name]: value }));
@@ -460,12 +1208,77 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     });
   };
 
-  const changeChecklist = (index, checked) => {
+  const changeSerialChecklist = (serialNumber, index, checked) => {
+    setCompletionPayload((current) => ({
+      ...current,
+      serial_test_results: (current.serial_test_results || []).map((result) => (
+        result.serial_number === serialNumber
+          ? {
+              ...result,
+              reviewed: false,
+              checklist: (result.checklist || []).map((item, itemIndex) => (
+                itemIndex === index ? { ...item, checked } : item
+              )),
+            }
+          : result
+      )),
+    }));
+  };
+
+  const passAllSerialChecks = (serialNumber) => {
+    setCompletionPayload((current) => ({
+      ...current,
+      serial_test_results: (current.serial_test_results || []).map((result) => (
+        result.serial_number === serialNumber
+          ? {
+              ...result,
+              reviewed: false,
+              checklist: (result.checklist || []).map((item) => ({ ...item, checked: true })),
+            }
+          : result
+      )),
+    }));
+  };
+
+  const confirmSerialTestResult = (serialNumber) => {
+    const currentResult = (completionPayload.serial_test_results || []).find((result) => result.serial_number === serialNumber);
+    const incompleteChecks = (currentResult?.checklist || []).filter((item) => typeof item.checked !== "boolean");
+    if (incompleteChecks.length > 0) {
+      setError(`Проверьте все пункты: осталось ${incompleteChecks.length}`);
+      return;
+    }
+    setError("");
     setCompletionPayload((current) => {
-      const checklist = [...(current.test_checklist || [])];
-      checklist[index] = { ...checklist[index], checked };
-      return { ...current, test_checklist: checklist };
+      const serialResults = (current.serial_test_results || []).map((result) => (
+        result.serial_number === serialNumber ? { ...result, reviewed: true } : result
+      ));
+      const defectiveSerialNumbers = serialResults
+        .filter((result) => result.reviewed && (result.checklist || []).some((item) => !item.checked))
+        .map((result) => result.serial_number);
+      const reviewedCount = serialResults.filter((result) => result.reviewed).length;
+      return {
+        ...current,
+        serial_test_results: serialResults,
+        defective_serial_numbers: defectiveSerialNumbers,
+        defective_qty: String(defectiveSerialNumbers.length),
+        passed_qty: String(Math.max(reviewedCount - defectiveSerialNumbers.length, 0)),
+      };
     });
+    const nextSerial = (completionPayload.serial_test_results || []).find((result) => (
+      result.serial_number !== serialNumber
+      && !result.reviewed
+      && Number(task?.payload?.testing_claims?.[result.serial_number]) === Number(user?.id)
+    ))?.serial_number;
+    if (nextSerial) setActiveTestSerial(nextSerial);
+  };
+
+  const changeSerialRepairResult = (serialNumber, workDone) => {
+    setCompletionPayload((current) => ({
+      ...current,
+      serial_repair_results: (current.serial_repair_results || []).map((result) => (
+        result.serial_number === serialNumber ? { ...result, work_done: workDone } : result
+      )),
+    }));
   };
 
   const addExtraComponent = () => {
@@ -481,6 +1294,13 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       items[index] = { ...items[index], ...patch };
       return { ...current, extra_components: items };
     });
+  };
+
+  const removeExtraComponent = (index) => {
+    setCompletionPayload((current) => ({
+      ...current,
+      extra_components: (current.extra_components || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
   };
 
   const repairComponentMatches = (query) => {
@@ -513,7 +1333,10 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     setCompletionPayload((current) => {
       const defectiveProducts = current.defective_products || [];
       const exists = defectiveProducts.some((item) => item.product_id === productId);
-      const productLine = (task?.payload?.product_lines || []).find((item) => item.product_id === productId);
+      const productLines = task?.payload?.pending_product_lines?.length
+        ? task.payload.pending_product_lines
+        : (task?.payload?.product_lines || []);
+      const productLine = productLines.find((item) => item.product_id === productId);
       const maxQty = Number(productLine?.qty || 0);
       const normalizedQty = qty === "" ? "" : String(Math.min(Math.max(Number(qty || 0), 0), maxQty || Number(qty || 0)));
       const next = exists
@@ -525,7 +1348,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             defective_qty: normalizedQty,
           }];
       const totalDefective = next.reduce((sum, item) => sum + Number(item.defective_qty || 0), 0);
-      const totalQty = (task?.payload?.product_lines || []).reduce((sum, item) => sum + Number(item.qty || 0), 0);
+      const totalQty = productLines.reduce((sum, item) => sum + Number(item.qty || 0), 0);
       return { ...current, defective_products: next, defective_qty: String(totalDefective), passed_qty: String(Math.max(totalQty - totalDefective, 0)) };
     });
   };
@@ -722,20 +1545,6 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     load();
   };
 
-  const downloadFile = async (file) => {
-    const res = await fetch(`/api${file.url}`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.original_name || "attachment";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  };
-
   const downloadMaterialForm = async () => {
     const res = await fetch(`/api/tasks/${taskId}/form.xlsx`);
     if (!res.ok) {
@@ -917,16 +1726,46 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 
   if (!task) {
     return (
-      <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 text-sm text-slate-400">Загрузка задачи...</div>
+      <div className="task-fullscreen-shell fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-white">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-sm font-semibold text-slate-400">Загрузка задачи...</div>
       </div>
     );
   }
 
-  const attachments = task.payload?.attachments || [];
+  if (task.type?.startsWith("cancellation_")) {
+    return (
+      <CancellationTaskModal
+        task={task}
+        onClose={onClose}
+        onChanged={onChanged}
+        reload={load}
+      />
+    );
+  }
+
+  if (ENABLE_ASSEMBLY_PLANNING && task.type === "assembler_build" && !task.payload?.parent_planning_task_id && canManageTasks(user)) {
+    return (
+      <AssemblyPlanningModal
+        task={task}
+        users={users}
+        onClose={onClose}
+        onChanged={onChanged}
+      />
+    );
+  }
+
   const notes = task.payload?.notes || [];
   const shortages = task.payload?.shortages || [];
   const purchases = task.payload?.purchases || [];
+  const invoiceAttachments = [
+    task.payload?.invoice_attachment,
+    ...purchases.map((purchase) => purchase.invoice_attachment),
+  ].filter(Boolean).filter((file, index, files) => {
+    const fileKey = file.id || file.storage_path || file.path || file.url || file.original_name;
+    return files.findIndex((candidate) => (
+      candidate.id || candidate.storage_path || candidate.path || candidate.url || candidate.original_name
+    ) === fileKey) === index;
+  });
   const orderedItems = task.payload?.ordered_items || (task.type === "warehouse_receive_components" ? shortages : []);
   const receiptHistory = task.payload?.receipt_history || [];
   const transferMaterials = task.payload?.materials || [];
@@ -937,18 +1776,123 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const productDocuments = task.payload?.product_documents || [];
   const pendingProductLines = task.payload?.pending_product_lines || [];
   const finishedGoods = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.finished_goods || []);
+  const packingProductLines = pendingProductLines.length > 0
+    ? pendingProductLines
+    : (task.payload?.product_lines || [task.payload?.product_context].filter(Boolean));
+  const selectedPackingSerialNumbers = completionPayload.packed_serial_numbers || [];
+  const pendingPackingSerialNumbers = task.payload?.pending_serial_numbers || task.payload?.serial_numbers || [];
+  const packingSerialUnits = (task.payload?.serial_units?.length
+    ? task.payload.serial_units.filter((item) => pendingPackingSerialNumbers.includes(item.serial_number))
+    : pendingPackingSerialNumbers.map((serialNumber) => {
+        const line = packingProductLines[0] || task.payload?.product_context || {};
+        return {
+          serial_number: serialNumber,
+          product_id: line.product_id,
+          product_name: line.product_name,
+          drawing_number: line.drawing_number,
+          status: "passed",
+        };
+      }));
+  const visiblePackingSerialUnits = packingSerialUnits.filter((item) => {
+    const query = packingSerialSearch.trim().toLowerCase();
+    return !query || [item.serial_number, item.product_name, item.drawing_number].some((value) => (
+      String(value || "").toLowerCase().includes(query)
+    ));
+  });
+  const packingSelectedCount = selectedPackingSerialNumbers.length;
   const testProductLines = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.product_lines || []);
   const testTotalQty = testProductLines.reduce((sum, item) => sum + Number(item.qty || 0), testProductLines.length ? 0 : Number(task.payload?.assembled_qty || 0));
-  const testDefectiveTotal = (completionPayload.defective_products || []).reduce((sum, item) => sum + Number(item.defective_qty || 0), Number(testProductLines.length ? 0 : completionPayload.defective_qty || 0));
-  const testPassedTotal = Math.max(testTotalQty - testDefectiveTotal, 0);
-  const testChecklist = completionPayload.test_checklist || [];
-  const testCheckedCount = testChecklist.filter((item) => item.checked).length;
+  const serialTestResults = completionPayload.serial_test_results || [];
+  const testingClaims = task.payload?.testing_claims || {};
+  const testingClaimDetails = task.payload?.testing_claim_details || [];
+  const myTestingSerialNumbers = serialTestResults
+    .filter((result) => Number(testingClaims[result.serial_number]) === Number(user?.id))
+    .map((result) => result.serial_number);
+  const mySerialTestResults = serialTestResults.filter((result) => myTestingSerialNumbers.includes(result.serial_number));
+  const freeSerialTestResults = serialTestResults.filter((result) => !testingClaims[result.serial_number]);
+  const otherClaimedSerialTestResults = serialTestResults.filter((result) => (
+    testingClaims[result.serial_number]
+    && Number(testingClaims[result.serial_number]) !== Number(user?.id)
+  ));
+  const testingColleagueSummary = Object.entries(
+    testingClaimDetails
+      .filter((claim) => Number(claim.user_id) !== Number(user?.id))
+      .reduce((result, claim) => {
+        result[claim.user_name] = (result[claim.user_name] || 0) + 1;
+        return result;
+      }, {}),
+  ).map(([name, count]) => `${name} — ${count}`).join(", ");
+  const reviewedSerialTestResults = serialTestResults.filter((result) => result.reviewed);
+  const defectiveSerialTestResults = reviewedSerialTestResults.filter((result) => (
+    (result.checklist || []).some((item) => !item.checked)
+  ));
+  const passedSerialTestResults = reviewedSerialTestResults.filter((result) => (
+    (result.checklist || []).every((item) => item.checked)
+  ));
+  const testDefectiveTotal = serialTestResults.length
+    ? defectiveSerialTestResults.length
+    : (completionPayload.defective_products || []).reduce((sum, item) => sum + Number(item.defective_qty || 0), Number(testProductLines.length ? 0 : completionPayload.defective_qty || 0));
+  const testPassedTotal = serialTestResults.length
+    ? passedSerialTestResults.length
+    : Math.max(testTotalQty - testDefectiveTotal, 0);
+  const taskSerialNumbers = task.payload?.serial_numbers || [];
+  const taskSerialNumberStatuses = task.payload?.serial_number_statuses || {};
+  const assemblyClaims = task.payload?.assembly_claims || {};
+  const assemblyClaimDetails = task.payload?.assembly_claim_details || [];
+  const selectedAssemblySerialNumbers = completionPayload.assembled_serial_numbers || [];
+  const transferredAssemblySerialNumbers = task.payload?.transferred_serial_numbers || [];
+  const transferredAssemblySerialSet = new Set(transferredAssemblySerialNumbers);
+  const visibleTaskSerialNumbers = taskSerialNumbers.filter((serialNumber) => (
+    String(serialNumber).toLowerCase().includes(serialSearch.trim().toLowerCase())
+  ));
+  const filteredAssemblySerialNumbers = taskSerialNumbers.filter((serialNumber) => (
+    String(serialNumber).toLowerCase().includes(assemblySerialSearch.trim().toLowerCase())
+    && (
+      assemblySerialFilter === "all"
+      || (assemblySerialFilter === "transferred" && transferredAssemblySerialSet.has(serialNumber))
+      || (assemblySerialFilter === "assembled" && selectedAssemblySerialNumbers.includes(serialNumber) && !transferredAssemblySerialSet.has(serialNumber))
+      || (
+        !selectedAssemblySerialNumbers.includes(serialNumber)
+        && (
+          (assemblySerialFilter === "free" && !assemblyClaims[serialNumber])
+          || (assemblySerialFilter === "my" && Number(assemblyClaims[serialNumber]) === Number(user?.id))
+          || (assemblySerialFilter === "other" && assemblyClaims[serialNumber] && Number(assemblyClaims[serialNumber]) !== Number(user?.id))
+        )
+      )
+    )
+  ));
+  const assemblySerialPageSize = 10;
+  const visibleAssemblySerialNumbers = assemblySerialSearch.trim() || assemblySerialsExpanded
+    ? filteredAssemblySerialNumbers
+    : filteredAssemblySerialNumbers.slice(0, assemblySerialPageSize);
+  const processedTaskSerialCount = taskSerialNumbers.filter((serialNumber) => (
+    ["passed", "repair", "packed", "stocked"].includes(taskSerialNumberStatuses[serialNumber])
+  )).length;
+  const planningAllocations = task.payload?.assembly_allocations || [];
+  const planningTotal = Number(task.payload?.planned_qty || task.payload?.product_context?.qty || 0);
+  const planningAllocatedTotal = planningAllocations.reduce((sum, item) => sum + Number(item.planned_qty || 0), 0);
+  const planningProducedTotal = planningAllocations.reduce((sum, item) => sum + Number(item.produced_qty || 0), 0);
+  const activeSerialTestResult = serialTestResults.find((result) => result.serial_number === activeTestSerial);
+  const activeTestChecklistTotal = activeSerialTestResult?.checklist?.length || 0;
+  const activeTestChecklistCompleted = (activeSerialTestResult?.checklist || []).filter((item) => typeof item.checked === "boolean").length;
+  const activeTestChecklistReady = Boolean(activeSerialTestResult) && activeTestChecklistCompleted === activeTestChecklistTotal;
   const dailyProgress = task.payload?.daily_progress || [];
   const materialRequests = task.payload?.material_requests || [];
   const openMaterialFlow = task.payload?.open_material_flow || [];
   const repairDefectiveProducts = pendingProductLines.length > 0 ? pendingProductLines : (task.payload?.defective_products || []);
   const repairDefectiveQty = repairDefectiveProducts.reduce((sum, item) => sum + Number(item.qty || item.defective_qty || 0), 0);
   const repairContext = task.payload?.product_context || repairDefectiveProducts[0] || {};
+  const repairSerialDefects = task.payload?.serial_defects?.length
+    ? task.payload.serial_defects
+    : (task.payload?.serial_numbers || []).map((serialNumber) => ({
+        serial_number: serialNumber,
+        failed_checks: [],
+        tester_note: task.payload?.notes || "",
+      }));
+  const activeRepairDefect = repairSerialDefects.find((defect) => defect.serial_number === activeRepairSerial) || repairSerialDefects[0];
+  const serialRepairResults = completionPayload.serial_repair_results || [];
+  const activeSerialRepairResult = serialRepairResults.find((result) => result.serial_number === activeRepairDefect?.serial_number);
+  const completedSerialRepairResults = serialRepairResults.filter((result) => String(result.work_done || "").trim());
   const repairComponentOptions = (task.payload?.component_options || []).length > 0 ? task.payload.component_options : bomComponentOptions;
   const deliveries = completionPayload.deliveries || [];
   const assemblyAssignments = completionPayload.assembly_assignments || [];
@@ -979,8 +1923,40 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const assemblyIssuedBlockers = task.payload?.issued_details?.blockers || [];
   const assemblyPlannedTotal = assemblyAssignments.reduce((sum, item) => sum + Number(item.planned_qty || 0), 0);
   const assemblyProducedTotal = assemblyAssignments.reduce((sum, item) => sum + Number(item.produced_qty || 0), 0);
-  const assemblyTransferredQty = Number(task.payload?.transferred_to_test_qty || 0);
-  const assemblyTransferRemaining = Math.max(assemblyProducedTotal - assemblyTransferredQty, 0);
+  const assemblySelectableLimit = Math.max(
+    transferredAssemblySerialNumbers.length,
+    Math.min(taskSerialNumbers.length, Math.max(0, Math.floor(assemblyIssuedQty))),
+  );
+  const assemblySelectionCapacity = Math.max(assemblySelectableLimit - selectedAssemblySerialNumbers.length, 0);
+  const freeAssemblySerialNumbers = taskSerialNumbers.filter((serialNumber) => (
+    !selectedAssemblySerialNumbers.includes(serialNumber) && !assemblyClaims[serialNumber]
+  ));
+  const myAssemblySerialNumbers = taskSerialNumbers.filter((serialNumber) => (
+    !selectedAssemblySerialNumbers.includes(serialNumber)
+    && Number(assemblyClaims[serialNumber]) === Number(user?.id)
+  ));
+  const otherAssemblySerialNumbers = taskSerialNumbers.filter((serialNumber) => (
+    !selectedAssemblySerialNumbers.includes(serialNumber)
+    && assemblyClaims[serialNumber]
+    && Number(assemblyClaims[serialNumber]) !== Number(user?.id)
+  ));
+  const assemblyColleagueSummary = Object.entries(
+    assemblyClaimDetails
+      .filter((claim) => Number(claim.user_id) !== Number(user?.id))
+      .reduce((result, claim) => {
+        result[claim.user_name] = (result[claim.user_name] || 0) + 1;
+        return result;
+      }, {}),
+  ).map(([name, count]) => `${name} — ${count}`).join(", ");
+  const unassembledAssemblySerialNumbers = myAssemblySerialNumbers;
+  const visibleUnassembledAssemblySerialNumbers = visibleAssemblySerialNumbers.filter((serialNumber) => !selectedAssemblySerialNumbers.includes(serialNumber));
+  const newAssemblySerialCount = selectedAssemblySerialNumbers.filter((serialNumber) => !transferredAssemblySerialSet.has(serialNumber)).length;
+  const unsavedAssemblySerialCount = selectedAssemblySerialNumbers.filter((serialNumber) => (
+    !transferredAssemblySerialSet.has(serialNumber)
+    && ["planned", "in_assembly"].includes(taskSerialNumberStatuses[serialNumber])
+  )).length;
+  const assemblyTransferRemaining = selectedAssemblySerialNumbers.filter((serialNumber) => !transferredAssemblySerialSet.has(serialNumber)).length;
+  const assemblyCompletedSerialCount = selectedAssemblySerialNumbers.length;
   const assemblyIssuedRemaining = Math.max(assemblyIssuedQty - assemblyProducedTotal, 0);
   const assemblyOrderRemaining = Math.max(assemblyTargetQty - assemblyProducedTotal, 0);
   const assemblyAvailableRemaining = Math.min(assemblyIssuedRemaining, assemblyOrderRemaining);
@@ -1002,17 +1978,57 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const assignedAssemblyToMe = assemblyAssignments.some((item) => Number(item.user_id) === Number(user?.id));
   const isAssignedToMe = task.assigned_user_id === user?.id;
   const canTake = ["assigned", "open"].includes(task.status) && (isAssignedToMe || (!task.assigned_user_id && (userHasRole(user, [task.role]) || canManageTasks(user))));
-  const canCompleteStatus = task.type === "assembler_build"
-    ? ["assigned", "in_progress", "open"].includes(task.status)
-    : ["in_progress", "open"].includes(task.status);
-  const canComplete = canCompleteStatus && (canManageTasks(user) || task.assigned_user_id === user?.id || assignedAssemblyToMe);
+  const canEditTask = task.status === "in_progress";
+  const canCompleteStatus = task.status === "in_progress";
+  const canComplete = canCompleteStatus && (
+    canManageTasks(user)
+    || task.assigned_user_id === user?.id
+    || assignedAssemblyToMe
+    || (task.type === "tester_check" && userHasRole(user, ["tester"]))
+    || (task.type === "assembler_build" && userHasRole(user, ["assembler"]))
+  );
   const hasOpenMaterialFlow = openMaterialFlow.length > 0;
   const hasAssemblyExtraComponents = task.type === "assembler_build" && (completionPayload.extra_components || []).some((item) => item.component_id && Number(item.qty || 0) > 0 && String(item.reason || "").trim());
   const blocksAssemblyTransfer = task.type === "assembler_build" && hasOpenMaterialFlow;
   const hasRepairExtraComponents = task.type === "repair_defects" && (completionPayload.extra_components || []).some((item) => item.component_id && Number(item.qty || 0) > 0 && String(item.reason || "").trim());
+  const hasIncompleteRepairComponents = task.type === "repair_defects" && (completionPayload.extra_components || []).some((item) => (
+    !item.component_id || Number(item.qty || 0) <= 0 || !String(item.reason || "").trim()
+  ));
   const blocksRepairCompletion = task.type === "repair_defects" && hasOpenMaterialFlow;
+  const blocksRepairResultCompletion = task.type === "repair_defects"
+    && serialRepairResults.length > 0
+    && completedSerialRepairResults.length !== serialRepairResults.length;
+  const blocksTestingCompletion = task.type === "tester_check"
+    && serialTestResults.length > 0
+    && reviewedSerialTestResults.length === 0;
+  const taskUx = TASK_UX_CONFIG[task.type] || {
+    area: "Рабочая задача",
+    purpose: task.description || "Выполнить назначенную работу и зафиксировать результат",
+    steps: ["Проверить исходные данные", "Выполнить назначенную работу", "Зафиксировать результат"],
+    action: "Завершить задачу",
+    accent: "slate",
+  };
+  const accentClasses = {
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    violet: "border-violet-100 bg-violet-50 text-violet-700",
+    cyan: "border-cyan-100 bg-cyan-50 text-cyan-700",
+    amber: "border-amber-100 bg-amber-50 text-amber-800",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    rose: "border-rose-100 bg-rose-50 text-rose-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+  };
   const actionLabel = loading
     ? "Сохранение..."
+    : task.type === "repair_defects" && hasIncompleteRepairComponents
+      ? "Заполните позиции компонентов"
+    : task.type === "repair_defects" && blocksRepairResultCompletion
+      ? `Описано ${completedSerialRepairResults.length} из ${serialRepairResults.length}`
+    : task.type === "tester_check" && blocksTestingCompletion
+      ? "Проверьте хотя бы одно устройство"
+    : task.type === "tester_check" && serialTestResults.length > 0
+      ? `Передать проверенные · ${reviewedSerialTestResults.length}`
+    : task.type === "packer_pack"
+      ? `Передать на склад · ${packingSelectedCount}`
     : task.type === "procurement_purchase"
       ? "Передать на оплату"
       : task.type === "repair_defects" && hasRepairExtraComponents
@@ -1023,41 +2039,264 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             ? "Ожидает допкомпоненты"
           : task.type === "assembler_build"
             ? `Передать на тестирование${assemblyTransferRemaining > 0 ? ` ${assemblyTransferRemaining} шт.` : ""}`
-          : "Отметить выполненной";
+          : taskUx.action;
+  const togglePackingSerial = (serialNumber) => {
+    setCompletionPayload((current) => {
+      const selected = new Set(current.packed_serial_numbers || []);
+      if (selected.has(serialNumber)) selected.delete(serialNumber);
+      else selected.add(serialNumber);
+      const packedSerialNumbers = pendingPackingSerialNumbers.filter((item) => selected.has(item));
+      return {
+        ...current,
+        packed_serial_numbers: packedSerialNumbers,
+        packed_qty: String(packedSerialNumbers.length),
+      };
+    });
+  };
+  const updateTestingClaims = async (serialNumbers, action = "claim") => {
+    if (!serialNumbers.length) return;
+    if (reviewedSerialTestResults.length > 0) {
+      setError("Сначала передайте уже проверенные устройства, затем изменяйте свою очередь");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const res = await fetch(`/api/tasks/${task.id}/testing-claims`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial_numbers: serialNumbers, action }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail || "Не удалось закрепить устройства");
+      await load();
+      return;
+    }
+    const data = await res.json();
+    setTask(data);
+    setCompletionPayload(defaultCompletionPayload(data));
+    const claimedByMe = (data.payload?.pending_serial_numbers || []).filter((serialNumber) => (
+      Number(data.payload?.testing_claims?.[serialNumber]) === Number(user?.id)
+    ));
+    setActiveTestSerial(claimedByMe[0] || "");
+  };
+  const updateAssemblyClaims = async (serialNumbers, action = "claim") => {
+    if (!serialNumbers.length) return;
+    if (unsavedAssemblySerialCount > 0) {
+      setError("Сначала сохраните или передайте уже собранные устройства, затем изменяйте свою очередь");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const res = await fetch(`/api/tasks/${task.id}/assembly-claims`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial_numbers: serialNumbers, action }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail || "Не удалось закрепить устройства");
+      await load();
+      return;
+    }
+    const data = await res.json();
+    setTask(data);
+    setCompletionPayload(defaultCompletionPayload(data));
+    setSuccessMessage(
+      action === "claim"
+        ? `${serialNumbers.length === 1 ? "Устройство закреплено" : `Закреплено устройств: ${serialNumbers.length}`}. Текущий список сохранён.`
+        : `${serialNumbers.length === 1 ? "Устройство освобождено" : `Освобождено устройств: ${serialNumbers.length}`}.`,
+    );
+  };
+  const selectPackingSerials = (serialNumbers) => {
+    const requested = new Set(serialNumbers);
+    const packedSerialNumbers = pendingPackingSerialNumbers.filter((item) => requested.has(item));
+    setCompletionPayload((current) => ({
+      ...current,
+      packed_serial_numbers: packedSerialNumbers,
+      packed_qty: String(packedSerialNumbers.length),
+    }));
+  };
+  const setAssemblySerialSelection = (serialNumbers) => {
+    const requested = new Set(serialNumbers);
+    const availableNewSerials = taskSerialNumbers
+      .filter((item) => !transferredAssemblySerialSet.has(item) && requested.has(item))
+      .slice(0, Math.max(assemblySelectableLimit - transferredAssemblySerialNumbers.length, 0));
+    const selected = new Set([...transferredAssemblySerialNumbers, ...availableNewSerials]);
+    const assembledSerialNumbers = taskSerialNumbers.filter((item) => selected.has(item));
+    setCompletionPayload((current) => {
+      return {
+        ...current,
+        assembled_serial_numbers: assembledSerialNumbers,
+        assembled_qty: assembledSerialNumbers.length,
+        assembly_assignments: (current.assembly_assignments || []).map((assignment, index) => (
+          index === 0 ? { ...assignment, produced_qty: assembledSerialNumbers.length } : assignment
+        )),
+        daily_entries: (current.daily_entries || []).map((entry) => ({ ...entry, qty: "" })),
+      };
+    });
+  };
+  const toggleAssemblySerial = (serialNumber) => {
+    if (transferredAssemblySerialSet.has(serialNumber)) return;
+    const selected = new Set(selectedAssemblySerialNumbers);
+    if (selected.has(serialNumber)) {
+      selected.delete(serialNumber);
+    } else {
+      if (assemblySelectionCapacity <= 0) {
+        setError(`По выданным комплектам можно отметить не более ${assemblySelectableLimit} шт.`);
+        return;
+      }
+      selected.add(serialNumber);
+    }
+    setError("");
+    setAssemblySerialSelection([...selected]);
+  };
+  const selectAssemblySerials = (serialNumbers) => {
+    if (assemblySelectionCapacity <= 0) {
+      setError(`По выданным комплектам можно отметить не более ${assemblySelectableLimit} шт.`);
+      return;
+    }
+    setError("");
+    setAssemblySerialSelection([
+      ...selectedAssemblySerialNumbers,
+      ...serialNumbers.slice(0, assemblySelectionCapacity),
+    ]);
+  };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[28px] border border-slate-100 shadow-xl w-full max-w-5xl max-h-[88vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-100 flex justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Задача #{task.id} · Заказ #{task.order_id || "—"} · {ROLE_LABELS[task.role] || task.role}
+    <div className="task-fullscreen-shell fixed inset-0 z-50 h-[100dvh] bg-white">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+        <div className="task-detail-header shrink-0 border-b border-slate-100 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.09),transparent_42%)] p-5 sm:px-8 sm:py-6">
+          <div className="flex justify-between gap-5">
+            <div className="max-w-5xl">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-slate-400">
+                <span className={`h-2 w-2 rounded-full ${task.status === "done" ? "bg-emerald-500" : task.status === "hold" ? "bg-amber-500" : task.status === "cancelled" ? "bg-rose-500" : "bg-blue-500"}`} />
+                <span>{taskUx.area}</span>
+                <span>·</span>
+                <span>Задача #{task.id}</span>
+                {task.order_id && <><span>·</span><span>Заказ #{task.order_id}</span></>}
+                <span>·</span>
+                <span>{taskDisplayStatus(task)}</span>
+              </div>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{task.title}</h2>
+              <p className="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-600">{taskUx.purpose}</p>
             </div>
-            <h2 className="text-xl font-black text-slate-900 mt-1">{task.title}</h2>
-            <p className="text-sm text-slate-500 mt-2">{task.description}</p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${taskStatusClass(task)}`}>
-                {taskDisplayStatus(task)}
-              </span>
-              <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100">
-                Исполнитель: {assigneeName(task)}
-              </span>
-            </div>
+            <button onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl leading-none text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">×</button>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="task-detail-body w-full max-w-none flex-1 space-y-6 overflow-y-auto p-5 sm:p-8">
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
           {successMessage && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3">{successMessage}</div>}
+          <section className="grid grid-flow-dense grid-cols-1 gap-3 md:grid-cols-3">
+            {taskUx.steps.map((step, index) => (
+              <div key={step} className="group rounded-2xl border border-slate-200 bg-white p-4 transition duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+                <div className="flex items-start gap-3">
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-xs font-black ${accentClasses[taskUx.accent]}`}>{index + 1}</span>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">{index === 0 ? "Проверить" : index === taskUx.steps.length - 1 ? "Результат" : "Выполнить"}</div>
+                    <p className="mt-1 text-sm font-bold leading-5 text-slate-800">{step}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
+          {task.description && task.description !== taskUx.purpose && (
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="text-xs font-black text-slate-500">Уточнение к задаче</div>
+              <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700">{task.description}</p>
+            </section>
+          )}
+          {task.type === "assembly_planning" && (
+            <section className="overflow-hidden rounded-2xl border border-blue-100 bg-white">
+              <div className="border-b border-blue-100 bg-blue-50/60 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">
+                      {task.payload?.product_context?.product_name || "Изделие"}
+                    </h3>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {[task.payload?.product_context?.drawing_number, task.payload?.planned_at && `Распределено ${new Date(task.payload.planned_at).toLocaleString("ru-RU")}`].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <span className="w-fit rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
+                    Распределение завершено
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-flow-dense grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    ["План", `${planningTotal || planningAllocatedTotal} шт.`],
+                    ["Распределено", `${planningAllocatedTotal} шт.`],
+                    ["Сборщики", planningAllocations.length],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-blue-100 bg-white px-3 py-3">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-blue-400">{label}</div>
+                      <div className="mt-1 text-xl font-black text-blue-800">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-black text-slate-900">Назначенные партии</h4>
+                  <span className="text-xs font-bold text-slate-400">Выпущено {planningProducedTotal} из {planningAllocatedTotal} шт.</span>
+                </div>
+                <div className="space-y-2">
+                  {planningAllocations.map((allocation, index) => {
+                    const statusClass = allocation.status === "done"
+                      ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                      : allocation.status === "in_progress"
+                        ? "border-blue-100 bg-blue-50 text-blue-700"
+                        : "border-amber-100 bg-amber-50 text-amber-700";
+                    return (
+                      <div key={allocation.task_id} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_110px_130px] sm:items-center">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xs font-black text-blue-700">{index + 1}</span>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-black text-slate-900">
+                              {allocation.assigned_user?.full_name || allocation.assigned_user?.username || "Сборщик не указан"}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold text-slate-400">
+                              Задача #{allocation.task_id}
+                              {allocation.due_date ? ` · срок ${new Date(allocation.due_date).toLocaleDateString("ru-RU")}` : " · без срока"}
+                              {allocation.serial_numbers?.length ? ` · ${allocation.serial_numbers.length} зав. номеров` : ""}
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Партия</div>
+                          <div className="mt-1 text-sm font-black text-slate-800">{allocation.planned_qty} шт.</div>
+                        </div>
+                        <span className={`w-fit rounded-xl border px-3 py-2 text-xs font-black ${statusClass}`}>
+                          {TASK_STATUS_LABELS[allocation.status] || allocation.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {planningAllocations.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-400">
+                      Дочерние задачи распределения не найдены
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
           {task.payload?.batch_summary && (
-            <section className="grid grid-cols-2 gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 md:grid-cols-4">
-              {[
-                ["Текущая партия", task.payload.batch_summary.current_batch_id ? `#${task.payload.batch_summary.current_batch_id}` : "—"],
-                ["В этой поставке", `${task.payload.batch_summary.current_batch_qty} шт.`],
-                ["Всего в очереди", `${task.payload.batch_summary.pending_qty} шт.`],
-                ["Партий ожидает", task.payload.batch_summary.batches_waiting],
-              ].map(([label, value]) => (
+            <section className={`grid grid-cols-2 gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 ${task.type === "packer_pack" ? "" : "md:grid-cols-4"}`}>
+              {(task.type === "packer_pack"
+                ? [
+                    ["Партия", `${task.payload.batch_summary.current_batch_qty} шт.`],
+                    ["Всего изделий в очереди", `${task.payload.batch_summary.pending_qty} шт.`],
+                  ]
+                : [
+                    ["Текущая партия", task.payload.batch_summary.current_batch_id ? `#${task.payload.batch_summary.current_batch_id}` : "—"],
+                    ["В этой поставке", `${task.payload.batch_summary.current_batch_qty} шт.`],
+                    ["Всего в очереди", `${task.payload.batch_summary.pending_qty} шт.`],
+                    ["Партий ожидает", task.payload.batch_summary.batches_waiting],
+                  ]).map(([label, value]) => (
                 <div key={label}>
                   <div className="text-[10px] font-black uppercase tracking-wider text-blue-400">{label}</div>
                   <div className="mt-1 text-lg font-black text-blue-800">{value}</div>
@@ -1067,35 +2306,85 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           )}
 
           {(canTake || canManageTasks(user)) && !["done", "waiting_delivery", "ready_to_issue"].includes(task.status) && (
-            <section className="bg-slate-50 border border-slate-100 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3 items-end">
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Исполнитель</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  {task.assigned_user ? `Назначен: ${assigneeName(task)}` : "Задача назначена группе. Исполнитель еще не выбран."}
-                </p>
+            <section className="grid grid-cols-1 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_260px]">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#3F8CFF] text-xs font-black text-white shadow-sm">
+                  {task.assigned_user ? personInitials(task.assigned_user) : (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H2v-2a4 4 0 014-4h3m4 6v-2a4 4 0 00-8 0v2m11-13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">{task.assigned_user ? assigneeName(task) : "Исполнитель не назначен"}</h3>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-400">{ROLE_LABELS[task.role] || task.role}</p>
+                </div>
               </div>
               {canManageTasks(user) ? (
-                <select
-                  value={task.assigned_user_id || ""}
-                  onChange={(e) => assignTask(e.target.value)}
-                  className="w-full p-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="">Не назначен</option>
-                  {users.map((item) => (
-                    <option key={item.id} value={item.id}>{item.full_name || item.username}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setAssigneeOpen((current) => !current)}
+                    className={`flex min-h-11 w-full items-center justify-between rounded-xl border bg-slate-50 px-3 text-left text-sm font-bold text-slate-700 outline-none transition hover:border-slate-300 ${assigneeOpen ? "border-blue-400 bg-white ring-4 ring-blue-500/10" : "border-slate-200"}`}
+                  >
+                    <span className="truncate">{task.assigned_user ? assigneeName(task) : "Выбрать исполнителя"}</span>
+                    <svg className={`ml-3 h-4 w-4 shrink-0 text-slate-400 transition-transform ${assigneeOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {assigneeOpen && (
+                    <div className="absolute right-0 top-full z-40 mt-2 max-h-64 w-full min-w-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl">
+                      <button
+                        type="button"
+                        onClick={async () => { setAssigneeOpen(false); await assignTask(""); }}
+                        className={`flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-slate-50 ${!task.assigned_user_id ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}
+                      >
+                        Не назначен
+                      </button>
+                      {users.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={async () => { setAssigneeOpen(false); await assignTask(item.id); }}
+                          className={`mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 ${Number(task.assigned_user_id) === Number(item.id) ? "bg-blue-50" : ""}`}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3F8CFF] text-xs font-black text-white shadow-sm">{personInitials(item)}</span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold text-slate-800">{item.full_name || item.username}</span>
+                            <span className="block text-[10px] font-semibold text-slate-400">{ROLE_LABELS[item.role] || item.role}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
-                <button onClick={takeTask} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest">
+                <button onClick={takeTask} className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700">
                   Взять в работу
                 </button>
               )}
             </section>
           )}
 
+          <fieldset disabled={!canEditTask} className={`task-workspace space-y-6 ${!canEditTask && task.status !== "done" ? "opacity-60" : ""}`}>
           {task.type === "procurement_purchase" && purchases.length > 0 && (
             <section className="bg-white border border-slate-100 rounded-2xl p-4">
-              <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">Закупки по задаче</h3>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Закупки по задаче</h3>
+                {invoiceAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {invoiceAttachments.map((file, index) => (
+                      <AuthenticatedFileLink
+                        key={file.id || file.storage_path || file.path || file.url || `${file.original_name}-${index}`}
+                        file={file}
+                        className="inline-flex rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                      >
+                        Счёт: {file.original_name || `файл ${index + 1}`}
+                      </AuthenticatedFileLink>
+                    ))}
+                  </div>
+                )}
+              </div>
 			                  <div className="space-y-2">
                 {purchases.map((purchase) => {
                   return (
@@ -1104,11 +2393,6 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 	                      <div className="font-bold text-slate-700 break-words">{componentTitle(purchase)}</div>
 	                      <div className="text-[11px] font-semibold text-slate-400 mt-1">{lineProductLabel(purchase)}</div>
 	                      <div className="text-slate-400 mt-1 break-words">{[purchase.supplier, purchase.invoice, purchase.expected_date].filter(Boolean).join(" · ") || "Без реквизитов"}</div>
-                        {purchase.invoice_attachment && (
-                          <AuthenticatedFileLink file={purchase.invoice_attachment} className="mt-2 inline-flex rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">
-                            Счет
-                          </AuthenticatedFileLink>
-                        )}
                     </div>
                     <div className="font-black text-slate-900">Заказано {purchase.qty}</div>
                     <div className="font-black text-emerald-700">Принято {purchase.received_qty || 0}</div>
@@ -1189,11 +2473,11 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           )}
 
           {task.type === "warehouse_receive_components" && orderedItems.length > 0 && (
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-sm font-black text-slate-900">Приемка поставки</h3>
-                  <p className="mt-1 text-xs font-semibold text-emerald-600">Проверьте фактическое поступление и приложите закрывающие документы.</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Проверьте фактическое поступление и приложите закрывающие документы.</p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
@@ -1224,20 +2508,8 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   )}
                 </div>
               )}
-              <div className="overflow-x-auto rounded-xl border border-emerald-100 bg-white">
-                <table className="w-full min-w-[840px] text-left text-xs">
-                  <thead className="bg-emerald-50 text-emerald-700">
-                    <tr>
-                      <th className="px-3 py-2.5 font-black">Изделие</th>
-                      <th className="px-3 py-2.5 font-black">Комплектующее</th>
-                      <th className="px-3 py-2.5 text-right font-black">Заказано</th>
-                      <th className="px-3 py-2.5 text-right font-black">Принято</th>
-                      <th className="px-3 py-2.5 text-right font-black">Осталось</th>
-                      {task.status !== "done" && <th className="px-3 py-2.5 text-right font-black">Принять сейчас</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderedItems.map((item, itemIndex) => {
+              <div className="space-y-2">
+                {orderedItems.map((item, itemIndex) => {
                       const lineKey = item.line_uid || item.component_id;
                       const orderedQty = Number(item.shortage_qty || item.qty || 0);
                       const receivedQty = Number(receivedByLine[lineKey] || 0);
@@ -1245,31 +2517,40 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       const remainingQty = Number(remainingLine?.shortage_qty || remainingLine?.qty || Math.max(orderedQty - receivedQty, 0));
                       const receivingLine = (completionPayload.items || []).find((line) => item.line_uid ? line.line_uid === item.line_uid : line.component_id === item.component_id);
                       return (
-                        <tr key={item.line_uid || `${item.component_id}-${itemIndex}`} className="border-t border-emerald-50 text-slate-700">
-                          <td className="px-3 py-3 font-semibold text-slate-500">{lineProductLabel(item)}</td>
-                          <td className="px-3 py-3 font-semibold">{componentTitle(item)}</td>
-                          <td className="px-3 py-3 text-right font-bold">{orderedQty}</td>
-                          <td className="px-3 py-3 text-right font-bold text-emerald-700">{receivedQty}</td>
-                          <td className="px-3 py-3 text-right font-bold text-amber-700">{remainingQty}</td>
+                        <div key={item.line_uid || `${item.component_id}-${itemIndex}`} className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1fr)_auto_220px] md:items-center">
+                          <div className="min-w-0">
+                            <div className="font-black text-slate-900">{componentTitle(item)}</div>
+                            <div className="mt-1 text-[11px] font-semibold text-slate-400">{lineProductLabel(item)}</div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-4 text-center text-xs md:min-w-56">
+                            <div><div className="font-black text-slate-900">{orderedQty}</div><div className="mt-0.5 font-semibold text-slate-400">заказано</div></div>
+                            <div><div className="font-black text-emerald-700">{receivedQty}</div><div className="mt-0.5 font-semibold text-slate-400">принято</div></div>
+                            <div><div className="font-black text-amber-700">{remainingQty}</div><div className="mt-0.5 font-semibold text-slate-400">осталось</div></div>
+                          </div>
                           {task.status !== "done" && (
-                            <td className="px-3 py-2 text-right">
-                              {remainingQty > 0 && receivingLine ? (
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={remainingQty}
-                                  value={receivingLine.qty || ""}
-                                  onChange={(e) => changeLineQty(item.component_id, e.target.value, item.line_uid)}
-                                  className="ml-auto w-24 rounded-lg border border-emerald-100 p-2 text-right text-sm font-semibold outline-none focus:border-emerald-400"
-                                />
-                              ) : "—"}
-                            </td>
+                            remainingQty > 0 && receivingLine ? (
+                              <label className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                                <span className="mb-2 block text-[10px] font-black uppercase tracking-wider text-blue-600">Принять сейчас</span>
+                                <div className="flex gap-2">
+                                  <div className="relative min-w-0 flex-1">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={remainingQty}
+                                      value={receivingLine.qty || ""}
+                                      onChange={(e) => changeLineQty(item.component_id, e.target.value, item.line_uid)}
+                                      className="min-h-11 w-full rounded-xl border border-blue-200 bg-white px-3 pr-10 text-right text-base font-black text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                                    />
+                                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">шт.</span>
+                                  </div>
+                                  <button type="button" onClick={() => changeLineQty(item.component_id, String(remainingQty), item.line_uid)} className="rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 hover:bg-blue-100">Всё</button>
+                                </div>
+                              </label>
+                            ) : <div className="text-center text-xs font-semibold text-emerald-600">Принято полностью</div>
                           )}
-                        </tr>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
               </div>
               {receiptHistory.length > 0 && (
                 <div className="mt-3 space-y-1.5">
@@ -1304,7 +2585,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           )}
 
           {shortages.length > 0 && task.type !== "warehouse_receive_components" && (
-            <section className="bg-red-50 border border-red-100 rounded-2xl p-4">
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-sm font-black text-slate-900">
@@ -1329,9 +2610,17 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                 <div className="mb-4 rounded-2xl border border-red-100 bg-white p-4">
                   <p className="mb-3 text-xs font-black text-slate-700">Счет поставщика</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <PayloadField label="Номер счета / ссылка" name="invoice" value={completionPayload.invoice} onChange={changePayload} />
+                    <PayloadField label="Номер счёта" name="invoice" value={completionPayload.invoice} onChange={changePayload} />
                     <PayloadField label="Поставщик" name="supplier" value={completionPayload.supplier} onChange={changePayload} />
-                    <PayloadField label="Ожидаемая дата" name="expected_date" value={completionPayload.expected_date} onChange={changePayload} type="date" />
+                    <label className="block min-w-0">
+                      <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Ожидаемая дата</span>
+                      <CalendarField
+                        value={completionPayload.expected_date}
+                        onChange={(value) => changePayload("expected_date", value)}
+                        minDate={new Date().toLocaleDateString("en-CA")}
+                        className="min-w-0"
+                      />
+                    </label>
                     <label className="block">
                       <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Файл счета</span>
                       <span className="flex min-h-11 cursor-pointer items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-500 hover:border-blue-300">
@@ -1347,22 +2636,24 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       </span>
                     </label>
                     <div className="sm:col-span-2 lg:col-span-4">
-                      <PayloadField label="Комментарий к счету" name="comment" value={completionPayload.comment} onChange={changePayload} />
+                      <PayloadField label="Комментарий к закупке" name="comment" value={completionPayload.comment} onChange={changePayload} />
                     </div>
                   </div>
                 </div>
               )}
               <div className="space-y-2">
                 {shortages.map((item, itemIndex) => (
-                  <div key={item.line_uid || `${item.component_id}-${itemIndex}`} className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px] gap-3 text-xs text-red-800 border-b border-red-100 last:border-b-0 pb-2 last:pb-0">
+                  <div key={item.line_uid || `${item.component_id}-${itemIndex}`} className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
                     <div className="min-w-0">
-                      <div className="font-bold break-words">{componentTitle(item)}</div>
-                      <div className="mt-1 text-[11px] font-semibold text-red-500">{lineProductLabel(item)}</div>
-                      <div className="text-red-600 mt-1">
-                        Нужно {item.required_qty || item.qty || item.shortage_qty}, доступно {item.available_qty ?? "—"}, не хватает {item.shortage_qty || item.qty}
+                      <div className="font-black break-words text-slate-900">{componentTitle(item)}</div>
+                      <div className="mt-1 text-[11px] font-semibold text-slate-400">{lineProductLabel(item)}</div>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-semibold text-slate-500">
+                        <span>Требуется: <b className="text-slate-800">{item.required_qty || item.qty || item.shortage_qty}</b></span>
+                        <span>На складе: <b className="text-slate-800">{item.available_qty ?? "—"}</b></span>
+                        <span>К закупке: <b className="text-rose-600">{item.shortage_qty || item.qty}</b></span>
                       </div>
                       {(item.expected_date || item.invoice || item.supplier) && (
-                        <div className="text-red-500 mt-1 break-words">
+                        <div className="mt-1 break-words text-slate-400">
                           {[item.expected_date && `Дата ${item.expected_date}`, item.invoice && `Счет ${item.invoice}`, item.supplier].filter(Boolean).join(" · ")}
                         </div>
                       )}
@@ -1370,17 +2661,23 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     {task.type === "procurement_purchase" && (
                       <div>
                         {deliveries.map((delivery, index) => (delivery.line_uid ? delivery.line_uid === item.line_uid : delivery.component_id === item.component_id) && (
-                          <label key={index} className="block">
-                            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-red-400">Купить по этому счету</span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.shortage_qty || item.qty}
-                              placeholder="0"
-                              value={delivery.qty || ""}
-                              onChange={(e) => changeDelivery(index, { qty: e.target.value })}
-                              className="w-full rounded-xl border border-red-100 bg-white p-2 text-sm font-semibold outline-none focus:border-red-400"
-                            />
+                          <label key={index} className="block rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                            <span className="mb-2 block text-[10px] font-black uppercase tracking-wider text-blue-600">Закупить по этому счёту</span>
+                            <div className="flex gap-2">
+                              <div className="relative min-w-0 flex-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={item.shortage_qty || item.qty}
+                                  placeholder="0"
+                                  value={delivery.qty || ""}
+                                  onChange={(e) => changeDelivery(index, { qty: e.target.value })}
+                                  className="min-h-11 w-full rounded-xl border border-blue-200 bg-white px-3 pr-10 text-right text-base font-black text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                                />
+                                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">шт.</span>
+                              </div>
+                              <button type="button" onClick={() => changeDelivery(index, { qty: String(item.shortage_qty || item.qty || 0) })} className="rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 hover:bg-blue-100">Всё</button>
+                            </div>
                           </label>
                         ))}
                       </div>
@@ -1394,7 +2691,28 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {task.type === "assembler_build" && (
               <div className="md:col-span-2 space-y-4">
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                <div className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-100 bg-slate-50 p-1.5">
+                  {[
+                    ["work", "Работа"],
+                    ["components", "Комплектующие"],
+                    ["documents", "Документы"],
+                    ["history", "История"],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setAssemblyTab(id)}
+                      className={`min-h-10 shrink-0 rounded-xl px-4 text-sm font-bold transition ${
+                        assemblyTab === id ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {label}
+                      {id === "components" && openMaterialFlow.length > 0 ? ` · ${openMaterialFlow.length}` : ""}
+                    </button>
+                  ))}
+                </div>
+
+                <div className={`${assemblyTab === "work" ? "" : "hidden"} rounded-2xl border border-slate-100 bg-white p-4`}>
                   <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <h3 className="text-sm font-black text-slate-900">План</h3>
@@ -1410,13 +2728,11 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     <div className="text-base font-black text-slate-900">{task.payload?.product_context?.product_name || assemblyProductLines[0]?.product_name || "Изделие"}</div>
                     <div className="mt-1 text-xs font-semibold text-slate-400">{task.payload?.product_context?.drawing_number || assemblyProductLines[0]?.drawing_number || "Без децимального номера"}</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                  <div className="grid grid-cols-3 gap-3">
                     {[
-                      ["Количество", assemblyTargetQty || "—"],
-                      ["Выдано комплектов", assemblyIssuedQty || 0],
+                      ["План", assemblyTargetQty || "—"],
                       ["Собрано", assemblyProducedTotal || 0],
-                      ["Остаток выданного", assemblyIssuedRemaining || 0],
-                      ["Остаток заказа", assemblyOrderRemaining || 0],
+                      ["Осталось", assemblyOrderRemaining || 0],
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-3">
                         <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</div>
@@ -1424,6 +2740,335 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       </div>
                     ))}
                   </div>
+                  {taskSerialNumbers.length > 0 && (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-blue-100 bg-white">
+                      <div className="border-b border-blue-100 bg-blue-50/60 p-3 sm:p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-black text-slate-900">Заводские номера партии</div>
+                            <div className="mt-1 text-xs font-semibold text-blue-600">
+                              Собрано {assemblyCompletedSerialCount} из {taskSerialNumbers.length} устройств
+                            </div>
+                          </div>
+                          <span className="w-fit rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-black text-blue-700">
+                            {Math.round((assemblyCompletedSerialCount / taskSerialNumbers.length) * 100)}%
+                          </span>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                            style={{ width: `${(assemblyCompletedSerialCount / taskSerialNumbers.length) * 100}%` }}
+                          />
+                        </div>
+                        <div className="mt-3 grid grid-flow-dense grid-cols-2 gap-2 lg:grid-cols-5">
+                          {[
+                            ["free", "Свободные", freeAssemblySerialNumbers.length],
+                            ["my", "Мои устройства", myAssemblySerialNumbers.length],
+                            ["other", "У коллег", otherAssemblySerialNumbers.length],
+                            ["assembled", "Собраны сейчас", newAssemblySerialCount],
+                            ["transferred", "На тестировании", transferredAssemblySerialNumbers.length],
+                          ].map(([filter, label, count]) => (
+                            <button
+                              key={filter}
+                              type="button"
+                              onClick={() => { setAssemblySerialFilter(filter); setAssemblySerialsExpanded(false); }}
+                              className={`min-w-0 rounded-xl border px-2 py-2.5 text-left transition ${
+                                assemblySerialFilter === filter
+                                  ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                                  : "border-blue-100 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                              }`}
+                            >
+                              <span className="block truncate text-[10px] font-bold">{label}</span>
+                              <span className="mt-0.5 block text-lg font-black leading-none">{count}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-[11px] font-semibold text-blue-700">
+                          Доступно по выданным комплектам: {assemblySelectableLimit} шт. · можно отметить ещё {assemblySelectionCapacity} шт.
+                        </div>
+                        {assemblySerialFilter === "free" && freeAssemblySerialNumbers.length > 0 && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <button type="button" disabled={loading} onClick={() => updateAssemblyClaims(freeAssemblySerialNumbers.slice(0, 1))} className="min-h-10 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                              Взять следующее устройство
+                            </button>
+                            <button type="button" disabled={loading} onClick={() => updateAssemblyClaims(freeAssemblySerialNumbers)} className="min-h-10 rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:text-slate-300">
+                              Взять все свободные
+                            </button>
+                          </div>
+                        )}
+                        {assemblySerialFilter === "other" && otherAssemblySerialNumbers.length > 0 && (
+                          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                            У коллег в работе: {assemblyColleagueSummary}
+                          </div>
+                        )}
+                        {assemblySerialFilter === "my" && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <button
+                              type="button"
+                              onClick={() => selectAssemblySerials(unassembledAssemblySerialNumbers.slice(0, 1))}
+                              disabled={assemblySelectionCapacity <= 0 || unassembledAssemblySerialNumbers.length === 0}
+                              className="min-h-10 rounded-xl bg-blue-600 px-3 text-xs font-black text-white transition hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400"
+                            >
+                              Собрано следующее
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectAssemblySerials(visibleUnassembledAssemblySerialNumbers)}
+                              disabled={assemblySelectionCapacity <= 0 || visibleUnassembledAssemblySerialNumbers.length === 0}
+                              className="min-h-10 rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:border-slate-200 disabled:text-slate-300"
+                            >
+                              Отметить показанные собранными
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectAssemblySerials(unassembledAssemblySerialNumbers)}
+                              disabled={assemblySelectionCapacity <= 0 || unassembledAssemblySerialNumbers.length === 0}
+                              className="min-h-10 rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:border-slate-200 disabled:text-slate-300"
+                            >
+                              Собран весь мой остаток
+                            </button>
+                            <button type="button" disabled={loading || myAssemblySerialNumbers.length === 0} onClick={() => updateAssemblyClaims(myAssemblySerialNumbers, "release")} className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:text-slate-300">
+                              Освободить мои устройства
+                            </button>
+                          </div>
+                        )}
+                        {assemblySerialFilter === "assembled" && newAssemblySerialCount > 0 && (
+                          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="text-sm font-black text-emerald-900">К передаче готово {newAssemblySerialCount} шт.</div>
+                              <div className="mt-1 text-[11px] font-semibold text-emerald-700">Проверьте номера ниже, сохраните отметки или передайте партию на тестирование.</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setAssemblySerialSelection(transferredAssemblySerialNumbers); setError(""); }}
+                              className="min-h-10 shrink-0 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
+                            >
+                              Снять все новые отметки
+                            </button>
+                          </div>
+                        )}
+                        {taskSerialNumbers.length > assemblySerialPageSize && (
+                          <label className="relative mt-3 block">
+                            <span className="sr-only">Найти заводской номер</span>
+                            <input
+                              value={assemblySerialSearch}
+                              onChange={(event) => setAssemblySerialSearch(event.target.value)}
+                              placeholder="Найти заводской номер"
+                              className="min-h-10 w-full rounded-xl border border-blue-100 bg-white px-3 pr-16 font-mono text-xs font-bold text-slate-700 outline-none transition placeholder:font-sans placeholder:font-semibold placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                            />
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">
+                              {filteredAssemblySerialNumbers.length}
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                      <div className="p-3 sm:p-4">
+                        <div className="hidden max-h-[420px] overflow-auto rounded-xl border border-slate-200 sm:block">
+                          <table className="w-full border-collapse text-left">
+                            <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              <tr>
+                                <th className="w-16 border-b border-slate-200 px-4 py-3">№</th>
+                                <th className="border-b border-slate-200 px-4 py-3">Заводской номер</th>
+                                <th className="w-44 border-b border-slate-200 px-4 py-3">Состояние</th>
+                                <th className="w-64 border-b border-slate-200 px-4 py-3 text-right">Действие</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {visibleAssemblySerialNumbers.map((serialNumber) => {
+                                const serialIndex = taskSerialNumbers.indexOf(serialNumber);
+                                const transferred = transferredAssemblySerialSet.has(serialNumber);
+                                const assembled = selectedAssemblySerialNumbers.includes(serialNumber);
+                                const claimOwnerId = assemblyClaims[serialNumber];
+                                const claimedByMe = Number(claimOwnerId) === Number(user?.id);
+                                const claimedByOther = claimOwnerId && !claimedByMe;
+                                const claimOwnerName = assemblyClaimDetails.find((claim) => claim.serial_number === serialNumber)?.user_name;
+                                return (
+                                  <tr key={serialNumber} className={`transition-colors ${transferred ? "bg-emerald-50/50" : assembled ? "bg-blue-50/60" : "bg-white hover:bg-slate-50"}`}>
+                                    <td className="px-4 py-3 text-xs font-black text-slate-400">{serialIndex + 1}</td>
+                                    <td className="px-4 py-3">
+                                      <span className="font-mono text-sm font-black text-slate-900">{serialNumber}</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-black ${
+                                        transferred
+                                          ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                                          : assembled
+                                            ? "border-blue-200 bg-blue-100 text-blue-800"
+                                            : "border-slate-200 bg-slate-100 text-slate-600"
+                                      }`}>
+                                        {transferred ? "На тестировании" : assembled ? "Собрано сейчас" : claimedByMe ? "У меня в сборке" : claimedByOther ? `У ${claimOwnerName || "коллеги"}` : "Свободно"}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      {claimedByMe && !assembled && !transferred ? (
+                                        <div className="flex justify-end gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleAssemblySerial(serialNumber)}
+                                            className="min-h-9 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 transition hover:bg-blue-600 hover:text-white"
+                                          >
+                                            Отметить собранным
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={loading}
+                                            onClick={() => updateAssemblyClaims([serialNumber], "release")}
+                                            className="min-h-9 rounded-lg border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 transition hover:bg-rose-50 disabled:text-slate-300"
+                                          >
+                                            Убрать
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          disabled={transferred || claimedByOther}
+                                          onClick={() => assembled ? toggleAssemblySerial(serialNumber) : updateAssemblyClaims([serialNumber])}
+                                          className={`min-h-9 rounded-lg border px-3 text-xs font-black transition ${
+                                            transferred
+                                              ? "cursor-default border-emerald-100 bg-transparent text-emerald-600"
+                                              : claimedByOther
+                                                ? "cursor-default border-slate-100 bg-slate-50 text-slate-400"
+                                              : assembled
+                                                ? "border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                                : "border-blue-200 bg-white text-blue-700 hover:bg-blue-600 hover:text-white"
+                                          }`}
+                                        >
+                                          {transferred ? "Зафиксировано" : claimedByOther ? "У коллеги" : assembled ? "Снять отметку" : "Взять устройство"}
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="space-y-2 sm:hidden">
+                          {visibleAssemblySerialNumbers.map((serialNumber) => {
+                            const serialIndex = taskSerialNumbers.indexOf(serialNumber);
+                            const transferred = transferredAssemblySerialSet.has(serialNumber);
+                            const assembled = selectedAssemblySerialNumbers.includes(serialNumber);
+                            const claimOwnerId = assemblyClaims[serialNumber];
+                            const claimedByMe = Number(claimOwnerId) === Number(user?.id);
+                            const claimedByOther = claimOwnerId && !claimedByMe;
+                            return (
+                              <div
+                                key={serialNumber}
+                                className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
+                                  transferred
+                                    ? "border-emerald-100 bg-emerald-50/70"
+                                    : assembled
+                                      ? "border-blue-200 bg-blue-50"
+                                      : "border-slate-100 bg-slate-50/70 hover:border-blue-200 hover:bg-blue-50/50"
+                                }`}
+                              >
+                                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black transition ${
+                                  transferred
+                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                    : assembled
+                                      ? "border-blue-500 bg-blue-500 text-white"
+                                      : "border-slate-200 bg-white text-slate-400"
+                                }`}>
+                                  {assembled ? "✓" : serialIndex + 1}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-mono text-xs font-black text-slate-800" title={serialNumber}>{serialNumber}</div>
+                                  <div className={`mt-0.5 text-[10px] font-bold ${transferred ? "text-emerald-700" : assembled ? "text-blue-700" : "text-slate-400"}`}>
+                                    {transferred ? "На тестировании" : assembled ? "Собрано сейчас" : claimedByMe ? "У меня в сборке" : claimedByOther ? "У коллеги" : "Свободно"}
+                                  </div>
+                                </div>
+                                {claimedByMe && !assembled && !transferred ? (
+                                  <div className="flex shrink-0 gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleAssemblySerial(serialNumber)}
+                                      className="min-h-9 rounded-lg border border-blue-200 bg-white px-2.5 text-[10px] font-black text-blue-700"
+                                    >
+                                      Собрано
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={loading}
+                                      onClick={() => updateAssemblyClaims([serialNumber], "release")}
+                                      className="min-h-9 rounded-lg border border-rose-200 bg-white px-2.5 text-[10px] font-black text-rose-700"
+                                    >
+                                      Убрать
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={transferred || claimedByOther}
+                                    onClick={() => assembled ? toggleAssemblySerial(serialNumber) : updateAssemblyClaims([serialNumber])}
+                                    className={`min-h-9 shrink-0 rounded-lg border px-3 text-[10px] font-black ${
+                                      transferred
+                                        ? "border-emerald-100 text-emerald-600"
+                                        : assembled
+                                          ? "border-slate-200 bg-white text-slate-600"
+                                          : "border-blue-200 bg-white text-blue-700"
+                                    }`}
+                                  >
+                                    {transferred ? "Готово" : claimedByOther ? "Занято" : assembled ? "Снять" : "Взять"}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {visibleAssemblySerialNumbers.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-400">
+                            {assemblySerialSearch.trim()
+                              ? "Заводской номер не найден в этой очереди"
+                              : assemblySerialFilter === "free"
+                                ? "Свободных устройств сейчас нет"
+                                : assemblySerialFilter === "my"
+                                  ? "В вашей очереди пока нет устройств"
+                                  : assemblySerialFilter === "other"
+                                    ? "У коллег сейчас нет устройств"
+                                : assemblySerialFilter === "assembled"
+                                  ? "Новых собранных устройств пока нет"
+                                  : "Устройства ещё не передавались на тестирование"}
+                          </div>
+                        )}
+                        {!assemblySerialSearch.trim() && filteredAssemblySerialNumbers.length > assemblySerialPageSize && (
+                          <button
+                            type="button"
+                            onClick={() => setAssemblySerialsExpanded((current) => !current)}
+                            className="mt-3 min-h-10 w-full rounded-xl border border-slate-200 bg-white text-xs font-black text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            {assemblySerialsExpanded
+                              ? "Свернуть список"
+                              : `Показать все · ещё ${filteredAssemblySerialNumbers.length - assemblySerialPageSize}`}
+                          </button>
+                        )}
+                        <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="text-xs font-semibold text-slate-400">
+                            {newAssemblySerialCount > 0
+                              ? `Текущая партия: ${newAssemblySerialCount} шт. Переданные ранее устройства изменить нельзя.`
+                              : "Отметьте собранные устройства — они появятся в очереди «Собраны сейчас»."}
+                          </span>
+                          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => complete(true)}
+                              disabled={loading || !canComplete || newAssemblySerialCount <= 0}
+                              className="min-h-10 rounded-xl border border-blue-200 bg-white px-4 text-xs font-black text-blue-700 transition hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-300"
+                            >
+                              Сохранить отметки
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => complete()}
+                              disabled={loading || !canComplete || blocksAssemblyTransfer || newAssemblySerialCount <= 0}
+                              className="min-h-10 rounded-xl bg-blue-600 px-4 text-xs font-black text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+                            >
+                              Передать на тест · {newAssemblySerialCount}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 {productDocuments.length > 0 && (
                     <div className="mt-4">
                       <h4 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">Документация изделия</h4>
@@ -1448,7 +3093,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   </div>
                 )}
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                <div className={`${assemblyTab === "work" && canManageTasks(user) && !task.payload?.parent_planning_task_id ? "" : "hidden"} rounded-2xl border border-slate-100 bg-white p-4`}>
 			                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			                    <div>
 			                      <h3 className="text-sm font-black text-slate-900">Исполнители</h3>
@@ -1557,7 +3202,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 		                    })}
 		                  </div>
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                <div className={`${assemblyTab === "work" && taskSerialNumbers.length === 0 ? "" : "hidden"} rounded-2xl border border-slate-100 bg-white p-4`}>
                   <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-sm font-black text-slate-900">Выпуск за сегодня</h3>
@@ -1745,7 +3390,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     </div>
                   )}
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                <div className={`${assemblyTab === "components" ? "" : "hidden"} rounded-2xl border border-slate-100 bg-white p-4`}>
 		                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 		                    <div>
 		                      <h3 className="text-sm font-black text-slate-900">Проблемы</h3>
@@ -1773,12 +3418,19 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 	                      return (
 	                        <div key={index} className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
 	                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px]">
-	                          <input
+	                          <div>
+                                <ComponentSearchField
 	                              value={item.component_query || ""}
-	                              onChange={(e) => changeExtraComponent(index, { component_query: e.target.value, component_id: "" })}
+	                              onChange={(value) => changeExtraComponent(index, { component_query: value, component_id: "" })}
 	                              placeholder="Поиск по R1, названию, артикулу"
-	                              className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]"
-	                          />
+                                  matches={matches}
+                                  onSelect={(component) => changeExtraComponent(index, {
+                                    component_id: component.component_id,
+                                    component_query: [uniqueDesignators(component.designators), component.component_name, component.part_number].filter(Boolean).join(" · "),
+                                  })}
+	                              className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]"
+                                />
+                              </div>
 	                          <input type="number" min="0" value={item.qty || ""} onChange={(e) => changeExtraComponent(index, { qty: e.target.value })} placeholder="Кол-во" className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]" />
 	                        </div>
                           <input
@@ -1789,7 +3441,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                           />
 	                          {selected && (
 	                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-	                              Выбрано: {componentTitle(selected)}{selected.designators ? ` · ${selected.designators}` : ""}
+	                              Выбрано: {componentTitle(selected)}{selected.designators ? ` · ${uniqueDesignators(selected.designators)}` : ""}
 	                            </div>
 	                          )}
 		                          {item.component_query && !selected && matches.length === 0 && (
@@ -1800,26 +3452,6 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 	                          {!item.component_query && !selected && repairComponentOptions.length > 0 && (
 	                            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-400">
 	                              Начните вводить позиционное обозначение, название или артикул компонента.
-	                            </div>
-	                          )}
-	                          {matches.length > 0 && !selected && (
-	                            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-white">
-	                              {matches.map((component) => (
-	                                <button
-	                                  key={component.component_id}
-	                                  type="button"
-	                                  onClick={() => changeExtraComponent(index, {
-	                                    component_id: component.component_id,
-	                                    component_query: [component.designators, component.component_name, component.part_number].filter(Boolean).join(" · "),
-	                                  })}
-	                                  className="block w-full border-b border-slate-50 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-blue-50"
-	                                >
-	                                  <span className="block font-black text-slate-800">{component.designators ? `${component.designators} · ` : ""}{component.component_name}</span>
-		                                  <span className="mt-0.5 block font-semibold text-slate-400">
-		                                    {[component.part_number, component.value, component.package, component.category, component.assembly].filter(Boolean).join(" · ")}
-		                                  </span>
-	                                </button>
-	                              ))}
 	                            </div>
 	                          )}
 	                        </div>
@@ -1886,61 +3518,430 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     </div>
                   )}
                 </div>
+
+                {assemblyTab === "documents" && (
+                  <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <h3 className="text-sm font-black text-slate-900">Документы изделия</h3>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Чертежи и файлы, необходимые во время сборки.</p>
+                    <div className="mt-4 space-y-3">
+                      {productDocuments.map((product) => (
+                        <div key={product.product_id} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                          <div className="font-black text-slate-900">{product.product_name}</div>
+                          <div className="mt-1 text-xs font-semibold text-slate-400">
+                            {[product.drawing_number, product.revision && `Рев. ${product.revision}`].filter(Boolean).join(" · ") || "Без децимального номера"}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {(product.attachments || []).map((file) => (
+                              <a key={file.stored_name} href={productFileUrl(file)} target="_blank" rel="noreferrer" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50">
+                                {file.original_name}
+                              </a>
+                            ))}
+                            {(product.attachments || []).length === 0 && <span className="text-xs font-semibold text-slate-400">Файлов нет</span>}
+                          </div>
+                        </div>
+                      ))}
+                      {!productDocuments.length && (
+                        <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-semibold text-slate-400">Документы не приложены</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {assemblyTab === "history" && (
+                  <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <h3 className="text-sm font-black text-slate-900">История сборки</h3>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Все сохранённые отметки выпуска по этой задаче.</p>
+                    <div className="mt-4 divide-y divide-slate-100">
+                      {dailyProgress.slice().reverse().map((entry, index) => (
+                        <div key={`${entry.date}-${entry.assignment_id || index}`} className="grid grid-cols-[90px_minmax(0,1fr)_auto] gap-3 py-3 text-xs first:pt-0 last:pb-0">
+                          <span className="font-bold text-slate-500">{entry.date}</span>
+                          <span className="min-w-0 font-semibold text-slate-600">
+                            {[entry.product_name, entry.user_name, entry.transfer_from_user_name && `передано от ${entry.transfer_from_user_name}`].filter(Boolean).join(" · ")}
+                            {entry.comment ? ` · ${entry.comment}` : ""}
+                          </span>
+                          <span className="font-black text-slate-900">{entry.qty} шт.</span>
+                        </div>
+                      ))}
+                      {!dailyProgress.length && (
+                        <div className="py-8 text-center text-sm font-semibold text-slate-400">Отметок выпуска пока нет</div>
+                      )}
+                    </div>
+                  </div>
+                )}
 	              </div>
             )}
             {task.type === "tester_check" && (
-              <div className="md:col-span-2 space-y-4">
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="testing-workspace md:col-span-2">
+                <div className="testing-overview mb-4 overflow-hidden rounded-2xl border border-blue-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_62%)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-sm font-black text-slate-900">Партия на тестировании</h3>
-                      <p className="mt-1 text-xs font-semibold text-slate-400">Отметьте брак, годные изделия посчитаются автоматически.</p>
+                      <h3 className="text-lg font-black text-slate-900">На проверке {testTotalQty || 0} шт.</h3>
+                      <p className="mt-1 text-sm font-semibold text-slate-500">
+                        Накоплено из {task.payload?.batch_summary?.batches_waiting || 1} поступлений
+                      </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                        <div className="font-black text-slate-900">{testTotalQty || 0}</div>
-                        <div className="font-semibold text-slate-400">всего</div>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="min-w-24 rounded-xl border border-emerald-100 bg-white px-4 py-2">
+                        <div className="text-xl font-black text-emerald-700">{testPassedTotal || 0}</div>
+                        <div className="text-xs font-semibold text-slate-400">годных</div>
                       </div>
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
-                        <div className="font-black text-emerald-700">{testPassedTotal || 0}</div>
-                        <div className="font-semibold text-emerald-600">годных</div>
-                      </div>
-                      <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2">
-                        <div className="font-black text-red-700">{testDefectiveTotal || 0}</div>
-                        <div className="font-semibold text-red-600">брак</div>
+                      <div className="min-w-24 rounded-xl border border-rose-100 bg-white px-4 py-2">
+                        <div className="text-xl font-black text-rose-700">{testDefectiveTotal || 0}</div>
+                        <div className="text-xs font-semibold text-slate-400">брак</div>
                       </div>
                     </div>
                   </div>
+                  <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${testTotalQty ? (testPassedTotal / testTotalQty) * 100 : 0}%` }}
+                    />
+                    <div
+                      className="bg-rose-500 transition-all duration-300"
+                      style={{ width: `${testTotalQty ? (testDefectiveTotal / testTotalQty) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
 
-                  {testProductLines.length > 0 ? (
-                    <div className="space-y-2">
-                      {testProductLines.map((item) => {
-                        const line = (completionPayload.defective_products || []).find((entry) => entry.product_id === item.product_id);
-                        const defectiveQty = Number(line?.defective_qty || 0);
-                        const totalQty = Number(item.qty || 0);
-                        return (
-                          <div key={item.product_id} className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 lg:grid-cols-[minmax(0,1fr)_120px_160px] lg:items-end">
-                            <div className="min-w-0">
-                              <div className="truncate text-base font-black text-slate-900">{item.product_name || `Изделие ID ${item.product_id}`}</div>
-                              <div className="mt-1 text-xs font-semibold text-slate-400">
-                                {[item.drawing_number, `${totalQty} шт. на тестировании`].filter(Boolean).join(" · ")}
+                <div className="mb-4 grid grid-flow-dense grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-3">
+                  {[
+                    ["checklist", "1. Проверка", `${reviewedSerialTestResults.length}/${serialTestResults.length || testTotalQty || 0}`],
+                    ["serials", "2. Обзор", taskSerialNumbers.length ? `${taskSerialNumbers.length} шт.` : `${testTotalQty || 0} шт.`],
+                    ["result", "3. Результат", testDefectiveTotal ? `брак ${testDefectiveTotal}` : "без брака"],
+                  ].map(([id, label, detail]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setTestingStep(id)}
+                      className={`group flex min-h-14 items-center justify-between gap-3 rounded-xl px-4 text-left transition ${
+                        testingStep === id
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-600/15"
+                          : "text-slate-500 hover:bg-white hover:text-blue-700"
+                      }`}
+                    >
+                      <span className="text-sm font-black">{label}</span>
+                      <span className={`text-[11px] font-bold ${testingStep === id ? "text-slate-300" : "text-slate-400"}`}>{detail}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {testingStep === "checklist" && (
+                  <div className="mb-4 space-y-3">
+                    <div className="grid grid-flow-dense grid-cols-2 gap-2 lg:grid-cols-4">
+                      {[
+                        ["Свободные", freeSerialTestResults.length, "border-blue-100 bg-blue-50 text-blue-800"],
+                        ["Мои устройства", mySerialTestResults.length, "border-blue-200 bg-blue-100/70 text-blue-900"],
+                        ["У коллег", otherClaimedSerialTestResults.length, "border-slate-200 bg-slate-50 text-slate-700"],
+                        ["Проверены", processedTaskSerialCount + reviewedSerialTestResults.length, "border-emerald-100 bg-emerald-50 text-emerald-800"],
+                      ].map(([label, value, classes]) => (
+                        <div key={label} className={`rounded-xl border px-3 py-3 ${classes}`}>
+                          <div className="text-[10px] font-bold">{label}</div>
+                          <div className="mt-1 text-xl font-black">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {freeSerialTestResults.length > 0 && (
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3 sm:p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900">Свободные устройства</h3>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">Закрепите номера за собой перед заполнением чек-листа.</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" disabled={loading} onClick={() => updateTestingClaims([freeSerialTestResults[0].serial_number])} className="min-h-10 rounded-xl bg-blue-600 px-4 text-xs font-black text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                              Взять следующее
+                            </button>
+                            <button type="button" disabled={loading} onClick={() => updateTestingClaims(freeSerialTestResults.map((result) => result.serial_number))} className="min-h-10 rounded-xl border border-blue-200 bg-white px-4 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:text-slate-300">
+                              Взять все свободные
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {freeSerialTestResults.slice(0, 8).map((result) => (
+                            <button key={result.serial_number} type="button" disabled={loading} onClick={() => updateTestingClaims([result.serial_number])} className="rounded-lg border border-blue-100 bg-white px-2.5 py-1.5 font-mono text-[10px] font-black text-slate-700 transition hover:border-blue-300">
+                              {result.serial_number}
+                            </button>
+                          ))}
+                          {freeSerialTestResults.length > 8 && <span className="px-2 py-1.5 text-[10px] font-bold text-blue-600">ещё {freeSerialTestResults.length - 8}</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {otherClaimedSerialTestResults.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                        У коллег в работе: {testingColleagueSummary}
+                      </div>
+                    )}
+
+                    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                    <div className="grid grid-flow-dense grid-cols-1 lg:grid-cols-12">
+                      <aside className="border-b border-slate-100 bg-slate-50/70 p-3 lg:col-span-4 lg:border-r lg:border-b-0">
+                        <div className="mb-3 px-1">
+                          <h3 className="text-sm font-black text-slate-900">Устройства партии</h3>
+                          <p className="mt-1 text-xs font-semibold text-slate-400">Выберите номер и пройдите его чек-лист.</p>
+                        </div>
+                        <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
+                          {mySerialTestResults.map((result, index) => {
+                            const hasDefect = result.reviewed && (result.checklist || []).some((item) => !item.checked);
+                            const completedChecks = (result.checklist || []).filter((item) => typeof item.checked === "boolean").length;
+                            const totalChecks = (result.checklist || []).length;
+                            return (
+                              <button
+                                key={result.serial_number}
+                                type="button"
+                                onClick={() => setActiveTestSerial(result.serial_number)}
+                                className={`group flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border px-3 text-left transition ${
+                                  activeTestSerial === result.serial_number
+                                    ? "border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-600/15"
+                                    : "border-slate-100 bg-white text-slate-700 hover:border-blue-200"
+                                }`}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-mono text-xs font-black">{result.serial_number}</span>
+                                  <span className={`mt-1 block text-[10px] font-bold ${activeTestSerial === result.serial_number ? "text-slate-300" : "text-slate-400"}`}>
+                                    {result.reviewed ? `Устройство ${index + 1} из ${mySerialTestResults.length}` : `Заполнено ${completedChecks} из ${totalChecks}`}
+                                  </span>
+                                </span>
+                                <span className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-black ${
+                                  !result.reviewed
+                                    ? "bg-blue-50 text-blue-600"
+                                    : hasDefect
+                                    ? "bg-rose-50 text-rose-700"
+                                    : "bg-emerald-50 text-emerald-700"
+                                }`}>
+                                  {!result.reviewed ? (completedChecks ? "В процессе" : "Не начато") : hasDefect ? "Брак" : "Годен"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {mySerialTestResults.length === 0 && (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-8 text-center text-xs font-semibold text-slate-400">
+                              Возьмите свободное устройство
+                            </div>
+                          )}
+                        </div>
+                      </aside>
+
+                      <div className="p-4 lg:col-span-8 lg:p-5">
+                        {activeSerialTestResult ? (
+                          <>
+                            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-slate-400">Моё устройство · заполнено {activeTestChecklistCompleted} из {activeTestChecklistTotal}</p>
+                                <h3 className="mt-1 font-mono text-xl font-black text-slate-900">{activeSerialTestResult.serial_number}</h3>
+                              </div>
+                              <div className="flex flex-col items-start gap-2 sm:items-end">
+                                <span className={`w-fit rounded-xl px-3 py-2 text-xs font-black ${
+                                  activeSerialTestResult.reviewed
+                                    ? (activeSerialTestResult.checklist || []).every((item) => item.checked)
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-rose-50 text-rose-700"
+                                    : activeTestChecklistReady
+                                      ? "bg-blue-50 text-blue-700"
+                                      : "bg-slate-100 text-slate-600"
+                                }`}>
+                                  {activeSerialTestResult.reviewed
+                                    ? (activeSerialTestResult.checklist || []).every((item) => item.checked) ? "Годен к упаковке" : "Будет направлен в ремонт"
+                                    : activeTestChecklistReady ? "Готово к фиксации" : "Проверка не завершена"}
+                                </span>
+                                {!activeSerialTestResult.reviewed && (
+                                  <button type="button" onClick={() => passAllSerialChecks(activeSerialTestResult.serial_number)} className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100">
+                                    Все пункты пройдены
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs">
-                              <div className="font-black text-emerald-700">{Math.max(totalQty - defectiveQty, 0)}</div>
-                              <div className="font-semibold text-slate-400">годных</div>
+                            <div className="mb-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-blue-500 transition-all duration-300" style={{ width: `${activeTestChecklistTotal ? activeTestChecklistCompleted / activeTestChecklistTotal * 100 : 0}%` }} />
                             </div>
-                            <label className="block">
-                              <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Брак, шт.</span>
+                            <div className="grid grid-flow-dense grid-cols-1 gap-2 sm:grid-cols-2">
+                              {(activeSerialTestResult.checklist || []).map((item, index) => (
+                                <div key={`${activeSerialTestResult.serial_number}-${item.id || index}`} className={`rounded-xl border p-3 transition ${
+                                  item.checked === true
+                                    ? "border-emerald-200 bg-emerald-50"
+                                    : item.checked === false
+                                      ? "border-rose-200 bg-rose-50"
+                                      : "border-slate-200 bg-white"
+                                }`}>
+                                  <div className="mb-3 flex items-start gap-2">
+                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-black ${
+                                      item.checked === true
+                                        ? "border-emerald-500 bg-emerald-500 text-white"
+                                        : item.checked === false
+                                          ? "border-rose-500 bg-rose-500 text-white"
+                                          : "border-slate-200 bg-slate-50 text-slate-400"
+                                    }`}>
+                                      {item.checked === true ? "✓" : item.checked === false ? "×" : index + 1}
+                                    </span>
+                                    <span className="pt-1 text-sm font-bold text-slate-800">{item.label}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <button type="button" onClick={() => changeSerialChecklist(activeSerialTestResult.serial_number, index, true)} className={`min-h-9 rounded-lg border text-xs font-black transition ${item.checked === true ? "border-emerald-500 bg-emerald-500 text-white" : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
+                                      Пройдено
+                                    </button>
+                                    <button type="button" onClick={() => changeSerialChecklist(activeSerialTestResult.serial_number, index, false)} className={`min-h-9 rounded-lg border text-xs font-black transition ${item.checked === false ? "border-rose-500 bg-rose-500 text-white" : "border-rose-200 bg-white text-rose-700 hover:bg-rose-50"}`}>
+                                      Не пройдено
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="max-w-md text-xs font-semibold text-slate-500">
+                                Непройденный пункт автоматически отправит это устройство в ремонт.
+                              </p>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                {!activeSerialTestResult.reviewed && (
+                                  <button type="button" onClick={() => updateTestingClaims([activeSerialTestResult.serial_number], "release")} className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 transition hover:bg-slate-50">
+                                    Освободить
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => confirmSerialTestResult(activeSerialTestResult.serial_number)}
+                                  disabled={!activeTestChecklistReady}
+                                  className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+                                >
+                                  {activeTestChecklistReady ? "Зафиксировать и перейти дальше" : `Осталось пунктов: ${activeTestChecklistTotal - activeTestChecklistCompleted}`}
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-xl bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-400">Выберите устройство для проверки</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                )}
+
+                {testingStep === "serials" && taskSerialNumbers.length > 0 && (
+                  <div className="mb-4 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">Результаты по устройствам</h3>
+                        <p className="mt-1 text-xs font-semibold text-slate-400">Итог определяется автоматически по персональному чек-листу каждого номера.</p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">
+                          Проверено ранее: {processedTaskSerialCount}
+                        </span>
+                        <input
+                          type="search"
+                          value={serialSearch}
+                          onChange={(event) => setSerialSearch(event.target.value)}
+                          placeholder="Найти заводской номер"
+                          className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-flow-dense grid-cols-1 gap-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {visibleTaskSerialNumbers.map((serialNumber) => {
+                        const serialResult = serialTestResults.find((result) => result.serial_number === serialNumber);
+                        const isDefective = serialResult?.reviewed && (serialResult.checklist || []).some((item) => !item.checked);
+                        const serialStatus = taskSerialNumberStatuses[serialNumber];
+                        const isProcessed = ["passed", "repair", "packed", "stocked"].includes(serialStatus);
+                        const processedLabel = serialStatus === "repair" ? "В ремонте" : "Годен";
+                        const resultLabel = isProcessed ? processedLabel : !serialResult?.reviewed ? "Не проверено" : isDefective ? "В ремонт" : "Годен";
+                        return (
+                          <div
+                            key={serialNumber}
+                            className={`flex min-h-11 items-center justify-between gap-3 rounded-xl border px-3 text-left transition ${
+                              isProcessed
+                                ? "cursor-default border-slate-100 bg-slate-50 text-slate-400"
+                                : isDefective
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-emerald-100 bg-emerald-50/60 text-emerald-700 hover:border-emerald-200"
+                            }`}
+                          >
+                            <span className="truncate font-mono text-xs font-black">{serialNumber}</span>
+                            <span className="shrink-0 text-xs font-black">{resultLabel}</span>
+                          </div>
+                        );
+                      })}
+                      {!visibleTaskSerialNumbers.length && (
+                        <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-400 sm:col-span-2 xl:col-span-3">Заводской номер не найден</div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-3 border-t border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs font-semibold text-slate-500">
+                        Проверено: <span className="font-black text-slate-900">{reviewedSerialTestResults.length} из {serialTestResults.length}</span>
+                      </p>
+                      <button type="button" onClick={() => setTestingStep("result")} className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white transition hover:bg-blue-700">
+                        Перейти к результату
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {testingStep === "serials" && taskSerialNumbers.length === 0 && (
+                  <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                    У партии нет заводских номеров. Количество брака можно указать на следующем шаге.
+                    <button type="button" onClick={() => setTestingStep("result")} className="mt-3 block min-h-10 rounded-xl bg-amber-900 px-4 text-xs font-black text-white">Перейти к результату</button>
+                  </div>
+                )}
+
+                {testingStep === "result" && <div className="grid grid-flow-dense grid-cols-1 gap-4 xl:grid-cols-12">
+                  <div className="space-y-3 xl:col-span-7">
+                  {testProductLines.length > 0 ? (
+                    <div className="space-y-3">
+                      {testProductLines.map((item) => {
+                        const line = (completionPayload.defective_products || []).find((entry) => entry.product_id === item.product_id);
+                        const defectiveQty = serialTestResults.length && testProductLines.length === 1
+                          ? testDefectiveTotal
+                          : Number(line?.defective_qty || 0);
+                        const totalQty = Number(item.qty || 0);
+                        const setDefectiveQty = (value) => changeDefectiveProduct(
+                          item.product_id,
+                          String(Math.min(Math.max(Number(value || 0), 0), totalQty)),
+                        );
+                        return (
+                          <div key={item.product_id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="truncate text-base font-black text-slate-900">{item.product_name || `Изделие ID ${item.product_id}`}</div>
+                                <div className="mt-1 text-xs font-semibold text-slate-400">
+                                  {[item.drawing_number, `${totalQty} шт.`].filter(Boolean).join(" · ")}
+                                </div>
+                              </div>
+                              <div className="text-sm font-bold text-emerald-700">
+                                Годных: {Math.max(totalQty - defectiveQty, 0)}
+                              </div>
+                            </div>
+                            {taskSerialNumbers.length === 0 && (
+                            <>
+                            <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
+                              <button
+                                type="button"
+                                disabled={defectiveQty <= 0}
+                                onClick={() => setDefectiveQty(defectiveQty - 1)}
+                                className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 text-xl font-black text-slate-600 transition hover:bg-slate-100 disabled:text-slate-300"
+                              >
+                                −
+                              </button>
                               <input
                                 type="number"
                                 min="0"
                                 max={totalQty}
                                 value={line?.defective_qty || ""}
+                                placeholder="Брак, шт."
                                 onChange={(e) => changeDefectiveProduct(item.product_id, e.target.value)}
-                                className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-blue-500"
+                                className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-black text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                               />
-                            </label>
+                              <button
+                                type="button"
+                                disabled={defectiveQty >= totalQty}
+                                onClick={() => setDefectiveQty(defectiveQty + 1)}
+                                className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 text-xl font-black text-slate-600 transition hover:bg-slate-100 disabled:text-slate-300"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <p className="mt-2 text-center text-xs font-semibold text-slate-400">Укажите только количество изделий с браком</p>
+                            </>
+                            )}
                           </div>
                         );
                       })}
@@ -1951,82 +3952,174 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       <PayloadField label="Бракованных изделий" name="defective_qty" value={completionPayload.defective_qty} onChange={changePayload} type="number" />
                     </div>
                   )}
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-black text-slate-900">Чеклист проверки</h3>
-                    <span className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black text-blue-600">
-                      {testCheckedCount}/{testChecklist.length || 0}
-                    </span>
                   </div>
-                  {testChecklist.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {testChecklist.map((item, index) => (
-                      <label key={`${item.label}-${index}`} className={`flex min-h-12 items-center gap-3 rounded-xl border px-3 text-sm font-semibold ${item.checked ? "border-blue-100 bg-blue-50 text-blue-700" : "border-slate-100 bg-slate-50 text-slate-700"}`}>
-                        <input type="checkbox" checked={Boolean(item.checked)} onChange={(e) => changeChecklist(index, e.target.checked)} className="h-4 w-4 accent-[#3F8CFF]" />
-                        <span>{item.label}</span>
-                      </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-400">
-                      В паспорте изделия чеклист тестирования не задан.
-                    </div>
-                  )}
-                </div>
 
-                <PayloadField label="Комментарий тестировщика" name="notes" value={completionPayload.notes} onChange={changePayload} />
+                  <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white xl:col-span-5">
+                    <div className="border-b border-slate-100 p-4">
+                      <h3 className="text-base font-black text-slate-900">Итог проверки</h3>
+                      <p className="mt-1 text-xs font-semibold text-slate-400">Проверьте результат перед завершением задачи.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 p-4">
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                        <div className="text-2xl font-black text-emerald-700">{testPassedTotal || 0}</div>
+                        <div className="mt-1 text-xs font-bold text-emerald-600">годных изделий</div>
+                      </div>
+                      <div className="rounded-xl border border-rose-100 bg-rose-50 p-3">
+                        <div className="text-2xl font-black text-rose-700">{testDefectiveTotal || 0}</div>
+                        <div className="mt-1 text-xs font-bold text-rose-600">отправится в ремонт</div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 px-4">
+                      <div className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold ${
+                        !serialTestResults.length || reviewedSerialTestResults.length > 0
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}>
+                        <span>Готово к передаче</span>
+                        <span>
+                          {serialTestResults.length
+                            ? `${reviewedSerialTestResults.length} из ${serialTestResults.length}`
+                            : "Без заводских номеров"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                        <span>Заводские номера</span>
+                        <span>{taskSerialNumbers.length || "не заданы"}</span>
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      <PayloadField label="Комментарий к проверке" name="notes" value={completionPayload.notes} onChange={changePayload} />
+                    </div>
+                  </div>
+                </div>}
               </div>
             )}
             {task.type === "repair_defects" && (
               <div className="md:col-span-2 space-y-4">
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-black text-slate-900">Дефектная партия</h3>
-                      <p className="mt-1 text-xs font-semibold text-slate-400">Изделия, которые тестировщик передал на устранение брака.</p>
-                    </div>
-                    <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-center text-xs">
-                      <div className="text-xl font-black text-red-700">{repairDefectiveQty || 0}</div>
-                      <div className="font-semibold text-red-600">в ремонте</div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {(repairDefectiveProducts.length > 0 ? repairDefectiveProducts : [repairContext]).map((item, index) => (
-                      <div key={`${item.product_id || index}-${item.product_name}`} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <div className="truncate text-base font-black text-slate-900">{item.product_name || repairContext.product_name || "Изделие"}</div>
-                            <div className="mt-1 text-xs font-semibold text-slate-400">{item.drawing_number || repairContext.drawing_number || "Без децимального номера"}</div>
+                <div className="grid grid-flow-dense grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-3">
+                  {[
+                    ["devices", "Устройства", `${repairSerialDefects.length || repairDefectiveQty || 0} шт.`],
+                    ["components", "Компоненты", (completionPayload.extra_components || []).length ? `${(completionPayload.extra_components || []).length} поз.` : "не требуются"],
+                    ["requests", "Заявки", hasOpenMaterialFlow ? "есть активные" : materialRequests.length ? `${materialRequests.length} в истории` : "нет заявок"],
+                  ].map(([id, label, detail]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setRepairTab(id)}
+                      className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 text-left transition ${
+                        repairTab === id
+                          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
+                          : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-700"
+                      }`}
+                    >
+                      <span className="text-sm font-black">{label}</span>
+                      <span className={`text-[11px] font-bold ${repairTab === id ? "text-blue-500" : "text-slate-400"}`}>{detail}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {repairTab === "devices" && (
+                  <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                    <div className="grid grid-flow-dense grid-cols-1 lg:grid-cols-12">
+                      <aside className="border-b border-slate-100 bg-slate-50/70 p-3 lg:col-span-4 lg:border-r lg:border-b-0">
+                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900">Дефектная партия</h3>
+                            <p className="mt-1 text-xs font-semibold text-slate-400">Выберите устройство.</p>
                           </div>
-                          <div className="rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-slate-700">
-                            {item.qty || item.defective_qty || repairDefectiveQty || 0} шт.
+                          <span className="rounded-lg bg-rose-100 px-2 py-1 text-xs font-black text-rose-700">{repairSerialDefects.length || repairDefectiveQty || 0}</span>
+                        </div>
+                        <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                          {repairSerialDefects.map((defect, index) => (
+                            <button
+                              key={defect.serial_number}
+                              type="button"
+                              onClick={() => setActiveRepairSerial(defect.serial_number)}
+                              className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border px-3 text-left transition ${
+                                activeRepairDefect?.serial_number === defect.serial_number
+                                  ? "border-blue-500 bg-blue-500 text-white shadow-lg shadow-blue-500/15"
+                                  : "border-slate-100 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/40"
+                              }`}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate font-mono text-xs font-black">{defect.serial_number}</span>
+                                <span className={`mt-1 block text-[10px] font-bold ${activeRepairDefect?.serial_number === defect.serial_number ? "text-blue-100" : "text-slate-400"}`}>
+                                  Устройство {index + 1} из {repairSerialDefects.length}
+                                </span>
+                              </span>
+                              <span className="shrink-0 rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700">
+                                {(defect.failed_checks || []).length} причин
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </aside>
+
+                      <div className="p-4 lg:col-span-8 lg:p-5">
+                        {activeRepairDefect ? (
+                          <>
+                            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-slate-400">{repairContext.product_name || "Ремонт устройства"}</p>
+                                <h3 className="mt-1 font-mono text-xl font-black text-slate-900">{activeRepairDefect.serial_number}</h3>
+                                <p className="mt-1 text-xs font-semibold text-slate-400">{repairContext.drawing_number || "Без децимального номера"}</p>
+                              </div>
+                              <span className="w-fit rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">Требуется ремонт</span>
+                            </div>
+                            <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
+                              <h4 className="text-xs font-black text-rose-700">Причины по результатам тестирования</h4>
+                              <div className="mt-3 grid grid-flow-dense grid-cols-1 gap-2 sm:grid-cols-2">
+                                {(activeRepairDefect.failed_checks || []).map((check, index) => (
+                                  <div key={`${check.id || check.label}-${index}`} className="flex min-h-11 items-center gap-2 rounded-xl border border-rose-100 bg-white px-3 text-sm font-semibold text-rose-900">
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-black text-rose-700">×</span>
+                                    <span>{check.label || "Причина не указана"}</span>
+                                  </div>
+                                ))}
+                                {!(activeRepairDefect.failed_checks || []).length && (
+                                  <p className="text-sm font-semibold text-rose-700 sm:col-span-2">Причина старой заявки не была сохранена по пунктам чек-листа.</p>
+                                )}
+                              </div>
+                              {activeRepairDefect.tester_note && (
+                                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600">Комментарий тестировщика: {activeRepairDefect.tester_note}</p>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-xl bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-400">В задаче нет привязанных заводских номеров</div>
+                        )}
+                        <div className="mt-5 border-t border-slate-100 pt-4">
+                          <label className="block">
+                            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              Что сделано с устройством {activeRepairDefect?.serial_number || ""}
+                            </span>
+                            <textarea
+                              rows={4}
+                              value={activeSerialRepairResult?.work_done || ""}
+                              onChange={(event) => changeSerialRepairResult(activeRepairDefect?.serial_number, event.target.value)}
+                              disabled={!activeRepairDefect}
+                              placeholder="Опишите диагностику, заменённые компоненты и выполненные работы"
+                              className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:bg-slate-50"
+                            />
+                          </label>
+                          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                            <span>Заполнено устройств</span>
+                            <span className="font-black text-slate-900">{completedSerialRepairResults.length} из {serialRepairResults.length}</span>
                           </div>
+                          <p className="mt-2 text-xs font-semibold text-slate-400">После завершения устройства будут переданы только на повторное тестирование.</p>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                  {task.payload?.notes ? (
-                    <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-                      Комментарий тестировщика: {task.payload.notes}
-                    </div>
-                  ) : null}
-                </div>
+                )}
 
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <h3 className="mb-3 text-sm font-black text-slate-900">Журнал ремонта</h3>
-                  <PayloadField label="Что сделано / результат ремонта" name="notes" value={completionPayload.notes} onChange={changePayload} />
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {repairTab === "components" && <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                  <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-sm font-black text-slate-900">Запрос допкомпонентов</h3>
-                      <p className="mt-1 text-xs font-semibold text-slate-400">Выберите компонент из состава бракованного изделия, укажите количество и причину.</p>
+                      <h3 className="text-base font-black text-slate-900">Компоненты для ремонта</h3>
+                      <p className="mt-1 max-w-xl text-xs font-semibold text-slate-400">Добавляйте только позиции, которых не хватает для устранения дефекта. Система проверит склад и при необходимости создаст закупку.</p>
                     </div>
-                    <button type="button" onClick={addExtraComponent} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-700">
-                      Добавить компонент
+                    <button type="button" onClick={addExtraComponent} className="min-h-11 shrink-0 rounded-xl bg-blue-600 px-4 text-xs font-black text-white shadow-sm transition hover:bg-blue-700">
+                      Добавить позицию
                     </button>
                   </div>
                   <div className="space-y-3">
@@ -2036,40 +4129,71 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       </div>
                     )}
                     {(completionPayload.extra_components || []).length === 0 && (
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-400">
-                        Если компоненты для ремонта не нужны, оставьте список пустым и завершите задачу после ремонта.
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center">
+                        <h4 className="text-sm font-black text-slate-800">Дополнительные компоненты не требуются</h4>
+                        <p className="mx-auto mt-2 max-w-md text-xs font-semibold leading-5 text-slate-400">Можно вернуться к устройствам и завершить ремонт. Если в процессе понадобится деталь, добавьте её здесь.</p>
+                        <button type="button" onClick={addExtraComponent} className="mt-4 min-h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 transition hover:border-blue-200 hover:text-blue-700">
+                          Добавить первую позицию
+                        </button>
                       </div>
                     )}
                     {(completionPayload.extra_components || []).map((item, index) => {
                       const matches = repairComponentMatches(item.component_query);
                       const selected = repairComponentOptions.find((component) => component.component_id === Number(item.component_id));
+                      const isReady = Boolean(selected && Number(item.qty || 0) > 0 && String(item.reason || "").trim());
                       return (
-                        <div key={index} className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_120px]">
-                            <input
-                              value={item.component_query || ""}
-                              onChange={(e) => changeExtraComponent(index, { component_query: e.target.value, component_id: "" })}
-                              placeholder="Поиск по R1, названию или артикулу"
-                              className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.qty || ""}
-                              onChange={(e) => changeExtraComponent(index, { qty: e.target.value })}
-                              placeholder="Кол-во"
-                              className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]"
-                            />
+                        <div key={index} className={`rounded-2xl border transition ${isReady ? "border-emerald-100 bg-emerald-50/30" : "border-slate-200 bg-slate-50/70"}`}>
+                          <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white/80 px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black ${isReady ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{index + 1}</span>
+                              <div>
+                                <h4 className="text-sm font-black text-slate-900">Позиция заявки</h4>
+                                <p className={`mt-0.5 text-[10px] font-bold ${isReady ? "text-emerald-600" : "text-slate-400"}`}>{isReady ? "Готова к отправке" : "Заполните обязательные поля"}</p>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => removeExtraComponent(index)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-100 bg-white text-lg font-bold text-rose-500 transition hover:bg-rose-50" aria-label={`Удалить позицию ${index + 1}`}>×</button>
                           </div>
-                          <input
-                            value={item.reason || ""}
-                            onChange={(e) => changeExtraComponent(index, { reason: e.target.value })}
-                            placeholder="Обоснование: зачем нужен компонент"
-                            className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3F8CFF]"
-                          />
+                          <div className="p-4">
+                            <div className="grid grid-flow-dense grid-cols-1 gap-3 lg:grid-cols-12">
+                              <div className="lg:col-span-9">
+                                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Компонент *</span>
+                                <ComponentSearchField
+                                  value={item.component_query || ""}
+                                  onChange={(value) => changeExtraComponent(index, { component_query: value, component_id: "" })}
+                                  placeholder="Позиционное обозначение, название или артикул"
+                                  matches={matches}
+                                  onSelect={(component) => changeExtraComponent(index, {
+                                    component_id: component.component_id,
+                                    component_query: [uniqueDesignators(component.designators), component.component_name, component.part_number].filter(Boolean).join(" · "),
+                                  })}
+                                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                                />
+                              </div>
+                              <label className="lg:col-span-3">
+                                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Количество *</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.qty || ""}
+                                  onChange={(e) => changeExtraComponent(index, { qty: e.target.value })}
+                                  placeholder="1"
+                                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black outline-none transition focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                                />
+                              </label>
+                              <label className="lg:col-span-12">
+                                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Зачем нужен компонент *</span>
+                                <input
+                                  value={item.reason || ""}
+                                  onChange={(e) => changeExtraComponent(index, { reason: e.target.value })}
+                                  placeholder="Например: замена элемента с коротким замыканием"
+                                  className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
+                                />
+                              </label>
+                            </div>
                           {selected && (
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                              Выбрано: {componentTitle(selected)}{selected.designators ? ` · ${selected.designators}` : ""}
+                            <div className="mt-3 flex flex-col gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 sm:flex-row sm:items-center sm:justify-between">
+                              <span className="font-black">Выбрано: {componentTitle(selected)}</span>
+                              <span className="font-semibold">{[uniqueDesignators(selected.designators), selected.value, selected.package].filter(Boolean).join(" · ")}</span>
                             </div>
                           )}
                           {item.component_query && !selected && matches.length === 0 && (
@@ -2082,33 +4206,22 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                               Начните вводить позиционное обозначение, название или артикул компонента.
                             </div>
                           )}
-                          {matches.length > 0 && !selected && (
-                            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-white">
-                              {matches.map((component) => (
-                                <button
-                                  key={component.component_id}
-                                  type="button"
-                                  onClick={() => changeExtraComponent(index, {
-                                    component_id: component.component_id,
-                                    component_query: [component.designators, component.component_name, component.part_number].filter(Boolean).join(" · "),
-                                  })}
-                                  className="block w-full border-b border-slate-50 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-blue-50"
-                                >
-                                  <span className="block font-black text-slate-800">{component.designators ? `${component.designators} · ` : ""}{component.component_name}</span>
-                                  <span className="mt-0.5 block font-semibold text-slate-400">
-                                    {[component.part_number, component.value, component.package, component.category, component.assembly].filter(Boolean).join(" · ")}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
+                    {(completionPayload.extra_components || []).length > 0 && (
+                      <div className={`flex flex-col gap-2 rounded-xl px-4 py-3 text-xs font-bold sm:flex-row sm:items-center sm:justify-between ${
+                        hasIncompleteRepairComponents ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+                      }`}>
+                        <span>{hasIncompleteRepairComponents ? "Есть незаполненные позиции" : "Все позиции готовы к отправке"}</span>
+                        <span>{(completionPayload.extra_components || []).filter((item) => item.component_id && Number(item.qty || 0) > 0 && String(item.reason || "").trim()).length} из {(completionPayload.extra_components || []).length}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </div>}
 
-                {hasOpenMaterialFlow && (
+                {repairTab === "requests" && hasOpenMaterialFlow && (
                   <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
                     <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-blue-700">Активные заявки</h3>
                     <div className="space-y-2">
@@ -2131,7 +4244,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   </div>
                 )}
 
-                {materialRequests.length > 0 && (
+                {repairTab === "requests" && materialRequests.length > 0 && (
                   <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                     <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-amber-700">История заявок</h3>
                     <div className="space-y-3">
@@ -2158,27 +4271,121 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     </div>
                   </div>
                 )}
+                {repairTab === "requests" && !hasOpenMaterialFlow && materialRequests.length === 0 && (
+                  <div className="rounded-2xl border border-slate-100 bg-white px-5 py-10 text-center">
+                    <h3 className="text-sm font-black text-slate-900">Заявок на компоненты нет</h3>
+                    <p className="mt-2 text-xs font-semibold text-slate-400">Если для ремонта понадобятся детали, добавьте их на вкладке «Компоненты».</p>
+                    <button type="button" onClick={() => setRepairTab("components")} className="mt-4 min-h-10 rounded-xl bg-blue-600 px-4 text-xs font-black text-white shadow-sm transition hover:bg-blue-700">
+                      Перейти к компонентам
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {task.type === "packer_pack" && (
-              <div className="md:col-span-2 rounded-2xl border border-slate-100 bg-white p-4">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900">Упаковка партии</h3>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">Проверьте количество упакованных изделий и передайте на склад готовой продукции.</p>
+              <div className="md:col-span-2 overflow-hidden rounded-2xl border border-violet-100 bg-white">
+                <div className="border-b border-violet-100 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.12),transparent_48%)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-base font-black text-slate-900">Упаковка по заводским номерам</h3>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Отметьте конкретные устройства, которые фактически упакованы и готовы к передаче на склад.</p>
+                    </div>
+                    <div className="rounded-xl border border-violet-100 bg-white px-4 py-2 text-center">
+                      <div className="text-xl font-black text-violet-700">{packingSelectedCount}</div>
+                      <div className="text-[10px] font-bold text-violet-500">выбрано из {packingSerialUnits.length}</div>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-center text-xs">
-                    <div className="text-xl font-black text-blue-700">{Number(task.payload?.batch_summary?.pending_qty || task.payload?.packed_qty || task.payload?.planned_qty || task.payload?.product_context?.qty || 0) || "—"}</div>
-                    <div className="font-semibold text-blue-600">план</div>
+                  <div className="mt-4 grid grid-flow-dense grid-cols-3 gap-2">
+                    {[
+                      ["Доступно", packingSerialUnits.length],
+                      ["Упаковано сейчас", packingSelectedCount],
+                      ["Останется", Math.max(packingSerialUnits.length - packingSelectedCount, 0)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-violet-100 bg-white px-3 py-2.5">
+                        <div className="truncate text-[10px] font-bold text-slate-400">{label}</div>
+                        <div className="mt-1 text-lg font-black text-slate-900">{value}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                {((task.payload?.product_lines || []).length > 0 ? task.payload.product_lines : [task.payload?.product_context].filter(Boolean)).map((item, index) => (
-                  <div key={`${item.product_id || index}-${item.product_name}`} className="mb-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                    <div className="font-black text-slate-900">{item.product_name || "Изделие"}</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-400">{[item.drawing_number, item.qty && `${item.qty} шт.`].filter(Boolean).join(" · ") || "Без децимального номера"}</div>
+
+                <div className="p-4 sm:p-5">
+                  <div className="mb-4 grid grid-flow-dense grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+                    <label className="relative block">
+                      <span className="sr-only">Найти устройство</span>
+                      <input
+                        value={packingSerialSearch}
+                        onChange={(event) => setPackingSerialSearch(event.target.value)}
+                        placeholder="Заводской номер, изделие или децимальный номер"
+                        className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-14 text-sm font-semibold text-slate-800 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">{visiblePackingSerialUnits.length}</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => selectPackingSerials(visiblePackingSerialUnits.map((item) => item.serial_number))} disabled={visiblePackingSerialUnits.length === 0} className="min-h-11 rounded-xl border border-violet-200 bg-violet-50 px-4 text-xs font-black text-violet-700 transition hover:bg-violet-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300">
+                        Выбрать показанные
+                      </button>
+                      <button type="button" onClick={() => selectPackingSerials([])} disabled={packingSelectedCount === 0} className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:text-slate-300">
+                        Снять отметки
+                      </button>
+                    </div>
                   </div>
-                ))}
-                <PayloadField label="Упаковано изделий" name="packed_qty" value={completionPayload.packed_qty} onChange={changePayload} type="number" />
+
+                  <div className="hidden max-h-[430px] overflow-auto rounded-xl border border-slate-200 sm:block">
+                    <table className="w-full border-collapse text-left">
+                      <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        <tr>
+                          <th className="w-14 border-b border-slate-200 px-4 py-3">Упак.</th>
+                          <th className="border-b border-slate-200 px-4 py-3">Заводской номер</th>
+                          <th className="border-b border-slate-200 px-4 py-3">Изделие</th>
+                          <th className="w-56 border-b border-slate-200 px-4 py-3">Децимальный номер</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {visiblePackingSerialUnits.map((item) => {
+                          const selected = selectedPackingSerialNumbers.includes(item.serial_number);
+                          return (
+                            <tr key={item.serial_number} onClick={() => togglePackingSerial(item.serial_number)} className={`cursor-pointer transition-colors ${selected ? "bg-violet-50/80" : "bg-white hover:bg-slate-50"}`}>
+                              <td className="px-4 py-3">
+                                <span className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs font-black ${selected ? "border-violet-500 bg-violet-600 text-white" : "border-slate-200 bg-white text-transparent"}`}>✓</span>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-sm font-black text-slate-900">{item.serial_number}</td>
+                              <td className="px-4 py-3 text-xs font-bold text-slate-700">{item.product_name || "Изделие"}</td>
+                              <td className="px-4 py-3 font-mono text-xs font-black text-violet-700">{item.drawing_number || "Не указан"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="space-y-2 sm:hidden">
+                    {visiblePackingSerialUnits.map((item) => {
+                      const selected = selectedPackingSerialNumbers.includes(item.serial_number);
+                      return (
+                        <button key={item.serial_number} type="button" onClick={() => togglePackingSerial(item.serial_number)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${selected ? "border-violet-200 bg-violet-50" : "border-slate-200 bg-white"}`}>
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-black ${selected ? "border-violet-500 bg-violet-600 text-white" : "border-slate-200 text-transparent"}`}>✓</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-mono text-xs font-black text-slate-900">{item.serial_number}</span>
+                            <span className="mt-1 block truncate text-[10px] font-bold text-slate-500">{item.product_name || "Изделие"} · {item.drawing_number || "Децимальный номер не указан"}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {visiblePackingSerialUnits.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-400">
+                      {packingSerialSearch.trim() ? "Устройства не найдены" : "Нет устройств, доступных для упаковки"}
+                    </div>
+                  )}
+
+                  <div className={`mt-4 rounded-xl border px-4 py-3 text-xs font-semibold ${packingSelectedCount ? "border-violet-100 bg-violet-50 text-violet-800" : "border-amber-100 bg-amber-50 text-amber-800"}`}>
+                    {packingSelectedCount
+                      ? `На склад будут переданы только выбранные устройства: ${packingSelectedCount} шт.`
+                      : "Перед завершением отметьте хотя бы одно фактически упакованное устройство."}
+                  </div>
+                </div>
               </div>
             )}
             {task.type === "accounting_payment" && (
@@ -2250,12 +4457,13 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
               </div>
             )}
           </section>
+          </fieldset>
 
-          <section className="rounded-2xl border border-slate-100 bg-white p-4">
-            <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Комментарии</h3>
+          {task.type === "manual" && <section className="rounded-2xl border border-slate-100 bg-white p-4">
+            <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Результат работы</h3>
             <div className="flex gap-2">
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Добавить комментарий..." className="min-h-10 flex-1 rounded-xl border border-slate-200 px-3 text-xs outline-none focus:border-[#3F8CFF]" />
-              <button onClick={addNote} className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white">OK</button>
+              <input disabled={!canEditTask} value={note} onChange={(e) => setNote(e.target.value)} placeholder={canEditTask ? "Добавить комментарий..." : "Сначала возьмите задачу в работу"} className="min-h-10 flex-1 rounded-xl border border-slate-200 px-3 text-xs outline-none focus:border-[#3F8CFF] disabled:bg-slate-50 disabled:text-slate-400" />
+              <button disabled={!canEditTask} onClick={addNote} className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:bg-slate-300">Добавить</button>
             </div>
             <div className="mt-3 space-y-2">
               {notes.length === 0 && <p className="text-xs text-slate-400">Комментариев нет.</p>}
@@ -2266,22 +4474,17 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
         </div>
 
-        <div className="p-6 border-t border-slate-100 flex justify-between items-center">
+        <div className="task-detail-actionbar flex shrink-0 items-center justify-between border-t border-slate-100 bg-white p-4 sm:px-8 sm:py-5">
           <button onClick={() => onClose()} className="text-xs font-bold text-slate-500">Закрыть</button>
 	          {task.status !== "done" && (
 	            canComplete ? (
 	              <div className="flex flex-col gap-2 sm:flex-row">
-	                {task.type === "assembler_build" && (
-	                  <button onClick={() => complete(true)} disabled={loading} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-widest text-white hover:bg-blue-700 disabled:bg-slate-300">
-	                    Сохранить отметку
-	                  </button>
-	                )}
 		                <button
                       onClick={() => complete(false)}
-                      disabled={loading || blocksAssemblyTransfer || blocksRepairCompletion || (task.type === "assembler_build" && assemblyTransferRemaining <= 0)}
+                      disabled={loading || blocksAssemblyTransfer || blocksRepairCompletion || blocksRepairResultCompletion || hasIncompleteRepairComponents || blocksTestingCompletion || (task.type === "assembler_build" && assemblyTransferRemaining <= 0) || (task.type === "packer_pack" && packingSelectedCount <= 0)}
                       className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest"
                     >
 		                  {actionLabel}
@@ -2314,7 +4517,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const res = await fetch(`/api/tasks/${taskId}`);
     if (!res.ok) {
       setError("Не удалось загрузить задачу");
@@ -2344,12 +4547,12 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
     }
     setTask(data);
     setPayload({ ...defaults, ...(data.payload?.completion || {}) });
-  };
+  }, [taskId]);
 
   useEffect(() => {
     completionKeyRef.current = null;
-    load();
-  }, [taskId]);
+    queueMicrotask(load);
+  }, [load]);
 
   const change = (name, value) => setPayload((current) => ({ ...current, [name]: value }));
   const changeLine = (collection, componentId, value, lineUid = "") => {
@@ -2373,7 +4576,16 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
         item.product_id === productId ? { ...item, defective_qty: qty } : item
       ));
       const totalDefective = next.reduce((sum, item) => sum + Number(item.defective_qty || 0), 0);
-      return { ...current, defective_products: next, defective_qty: String(totalDefective) };
+      const productLines = task?.payload?.pending_product_lines?.length
+        ? task.payload.pending_product_lines
+        : (task?.payload?.product_lines || []);
+      const totalQty = productLines.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+      return {
+        ...current,
+        defective_products: next,
+        defective_qty: String(totalDefective),
+        passed_qty: String(Math.max(totalQty - totalDefective, 0)),
+      };
     });
   };
   const changeQuickAcceptedGood = (productId, qty) => {
@@ -2391,7 +4603,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
     return res.ok ? res.json() : null;
   };
 
-  const complete = async () => {
+  const complete = async (saveOnly = false) => {
     completionKeyRef.current ||= crypto.randomUUID();
     setLoading(true);
     setError("");
@@ -2481,6 +4693,9 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
 
   const shortages = task.payload?.shortages || [];
   const canComplete = ["in_progress", "open"].includes(task.status) && (canManageTasks(user) || task.assigned_user_id === user?.id);
+  const quickTestProductLines = task.payload?.pending_product_lines?.length
+    ? task.payload.pending_product_lines
+    : (task.payload?.product_lines || []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
@@ -2509,7 +4724,15 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <PayloadField label="Номер счета / ссылка" name="invoice" value={payload.invoice} onChange={change} />
                 <PayloadField label="Поставщик" name="supplier" value={payload.supplier} onChange={change} />
-                <PayloadField label="Ожидаемая дата" name="expected_date" value={payload.expected_date} onChange={change} type="date" />
+                <label className="block min-w-0">
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Ожидаемая дата</span>
+                  <CalendarField
+                    value={payload.expected_date}
+                    onChange={(value) => change("expected_date", value)}
+                    minDate={new Date().toLocaleDateString("en-CA")}
+                    className="min-w-0"
+                  />
+                </label>
                 <label className="block">
                   <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Файл счета</span>
                   <span className="flex min-h-11 cursor-pointer items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-500 hover:border-blue-300">
@@ -2568,12 +4791,12 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
           {task.type === "tester_check" && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <PayloadField label="Годных изделий" name="passed_qty" value={payload.passed_qty} onChange={change} type="number" />
-              {(task.payload?.product_lines || []).length === 0 && (
+              {quickTestProductLines.length === 0 && (
                 <PayloadField label="Бракованных изделий" name="defective_qty" value={payload.defective_qty} onChange={change} type="number" />
               )}
-              {(task.payload?.product_lines || []).length > 0 && (
+              {quickTestProductLines.length > 0 && (
                 <div className="space-y-2 sm:col-span-2">
-                  {(task.payload.product_lines || []).map((item) => {
+                  {quickTestProductLines.map((item) => {
                     const line = (payload.defective_products || []).find((entry) => entry.product_id === item.product_id);
                     return (
                       <div key={item.product_id} className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[1fr_120px] sm:items-end">
@@ -2671,7 +4894,7 @@ function useTasks(endpoint) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(endpoint);
@@ -2679,9 +4902,11 @@ function useTasks(endpoint) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [endpoint]);
 
-  useEffect(() => { load(); }, [endpoint]);
+  useEffect(() => {
+    queueMicrotask(load);
+  }, [load]);
   return { tasks, loading, reload: load };
 }
 
@@ -2690,7 +4915,7 @@ function TaskList({ endpoint, user, onOpenPage, title, subtitle }) {
   const [activeTaskId, setActiveTaskId] = useState(null);
 
   return (
-    <div className="w-full max-w-none space-y-6 p-4 sm:p-6 lg:p-10">
+    <div className="workspace-page personnel-page w-full max-w-none space-y-6 p-4 sm:p-6 lg:p-10">
       <div>
         <h1 className="text-2xl font-black text-slate-900">{title}</h1>
         <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
@@ -2723,9 +4948,227 @@ function TaskList({ endpoint, user, onOpenPage, title, subtitle }) {
   );
 }
 
-function TaskCalendar({ endpoint, user, onOpenPage }) {
+function ManualTaskModal({ user, onClose, onCreated }) {
+  const allowedRoles = canManageTasks(user)
+    ? Object.keys(ROLE_LABELS).filter((role) => role !== "admin")
+    : userRoles(user).filter((role) => role !== "admin");
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    role: allowedRoles[0] || user?.role || "",
+    assigned_user_id: "",
+    order_id: "",
+    product_id: "",
+    priority: "normal",
+    planned_start_at: "",
+    due_date: "",
+    estimated_hours: "",
+    dependency_ids: [],
+  });
+  const [assignees, setAssignees] = useState([]);
+  const [allPeople, setAllPeople] = useState([]);
+  const [manualOptions, setManualOptions] = useState({ orders: [], products: [], tasks: [] });
+  const [watcherIds, setWatcherIds] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch(`/api/tasks/assignees?role=${encodeURIComponent(form.role)}`);
+      if (res.ok) setAssignees(await res.json());
+    };
+    if (form.role) load();
+  }, [form.role]);
+
+  useEffect(() => {
+    const load = async () => {
+      const [peopleRes, optionsRes] = await Promise.all([
+        fetch("/api/tasks/assignees"),
+        fetch("/api/tasks/manual-options"),
+      ]);
+      if (peopleRes.ok) setAllPeople(await peopleRes.json());
+      if (optionsRes.ok) setManualOptions(await optionsRes.json());
+    };
+    load();
+  }, []);
+
+  const change = (name, value) => setForm((current) => ({ ...current, [name]: value }));
+  const toggleWatcher = (id) => setWatcherIds((current) => (
+    current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+  ));
+  const addDependency = (value) => {
+    const id = Number(value);
+    if (!id) return;
+    change("dependency_ids", [...new Set([...form.dependency_ids, id])]);
+  };
+  const removeDependency = (id) => {
+    change("dependency_ids", form.dependency_ids.filter((item) => item !== id));
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError("");
+    if (!form.title.trim()) {
+      setError("Введите название задачи");
+      return;
+    }
+    setSaving(true);
+    const payload = {
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      role: form.role,
+      assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
+      order_id: form.order_id ? Number(form.order_id) : null,
+      product_id: form.product_id ? Number(form.product_id) : null,
+      priority: form.priority,
+      planned_start_at: form.planned_start_at || null,
+      due_date: form.due_date || null,
+      estimated_minutes: form.estimated_hours ? Math.round(Number(form.estimated_hours) * 60) : null,
+      watcher_ids: watcherIds,
+      dependency_ids: form.dependency_ids,
+    };
+    const res = await fetch("/api/tasks/manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail || "Не удалось создать задачу");
+      return;
+    }
+    await onCreated();
+    onClose();
+  };
+
+  const inputClass = "min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl sm:p-7">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#3F8CFF]">Новая работа</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">Создать ручную задачу</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">Заказ и изделие можно не указывать.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-500">✕</button>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="md:col-span-2">
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Название *</span>
+            <input autoFocus value={form.title} onChange={(e) => change("title", e.target.value)} className={inputClass} placeholder="Что нужно сделать" />
+          </label>
+          <label className="md:col-span-2">
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Описание</span>
+            <textarea value={form.description} onChange={(e) => change("description", e.target.value)} className={`${inputClass} min-h-24 py-3`} placeholder="Результат, условия и важные детали" />
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Отдел *</span>
+            <select value={form.role} onChange={(e) => change("role", e.target.value)} className={inputClass}>
+              {allowedRoles.map((role) => <option value={role} key={role}>{ROLE_LABELS[role] || role}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Исполнитель</span>
+            <select value={form.assigned_user_id} onChange={(e) => change("assigned_user_id", e.target.value)} className={inputClass}>
+              <option value="">Без исполнителя</option>
+              {assignees.map((item) => <option value={item.id} key={item.id}>{item.full_name || item.username}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Приоритет</span>
+            <select value={form.priority} onChange={(e) => change("priority", e.target.value)} className={inputClass}>
+              <option value="low">Низкий</option>
+              <option value="normal">Обычный</option>
+              <option value="high">Высокий</option>
+              <option value="critical">Критический</option>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Оценка, часов</span>
+            <input type="number" min="0.25" step="0.25" value={form.estimated_hours} onChange={(e) => change("estimated_hours", e.target.value)} className={inputClass} />
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Плановое начало</span>
+            <input type="datetime-local" value={form.planned_start_at} onChange={(e) => change("planned_start_at", e.target.value)} className={inputClass} />
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Дедлайн</span>
+            <input type="datetime-local" value={form.due_date} onChange={(e) => change("due_date", e.target.value)} className={inputClass} />
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Связать с заказом</span>
+            <select value={form.order_id} onChange={(e) => change("order_id", e.target.value)} className={inputClass}>
+              <option value="">Без привязки к заказу</option>
+              {manualOptions.orders.map((order) => (
+                <option value={order.id} key={order.id}>Заказ №{order.id} · {order.customer_name || "Без заказчика"}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Связать с изделием</span>
+            <select value={form.product_id} onChange={(e) => change("product_id", e.target.value)} className={inputClass}>
+              <option value="">Без привязки к изделию</option>
+              {manualOptions.products.map((product) => (
+                <option value={product.id} key={product.id}>
+                  {product.name}{product.drawing_number ? ` · ${product.drawing_number}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="md:col-span-2">
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">Начать после другой задачи</span>
+            <select value="" onChange={(e) => addDependency(e.target.value)} className={inputClass}>
+              <option value="">Выберите задачу, если есть зависимость</option>
+              {manualOptions.tasks
+                .filter((task) => !form.dependency_ids.includes(task.id))
+                .map((task) => (
+                  <option value={task.id} key={task.id}>#{task.id} · {task.title}</option>
+                ))}
+            </select>
+            {form.dependency_ids.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {form.dependency_ids.map((id) => {
+                  const dependency = manualOptions.tasks.find((task) => task.id === id);
+                  return (
+                    <button type="button" onClick={() => removeDependency(id)} key={id} className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-left text-xs font-bold text-blue-700">
+                      #{id} · {dependency?.title || "Задача"} <span className="ml-1 text-blue-400">×</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="text-xs font-bold text-slate-500">Наблюдатели</div>
+          <div className="mt-2 flex max-h-32 flex-wrap gap-2 overflow-y-auto">
+            {allPeople.map((item) => (
+              <button type="button" onClick={() => toggleWatcher(item.id)} key={item.id} className={`rounded-xl border px-3 py-2 text-xs font-bold ${watcherIds.includes(item.id) ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>
+                {item.full_name || item.username}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600">Отмена</button>
+          <button disabled={saving} className="min-h-11 rounded-2xl bg-[#3F8CFF] px-6 text-sm font-bold text-white disabled:bg-slate-300">{saving ? "Создание..." : "Создать задачу"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TaskCalendar({ endpoint, user }) {
   const { tasks, loading, reload } = useTasks(endpoint);
   const [activeTaskId, setActiveTaskId] = useState(null);
+  const [manualTaskOpen, setManualTaskOpen] = useState(false);
   const [periodOffset, setPeriodOffset] = useState(0);
   const [viewMode, setViewMode] = useState("week");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -2744,7 +5187,7 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
   };
   const parseTaskDate = (task) => {
     const expected = taskExpectedDates(task)[0];
-    const value = task.due_date || expected || (task.status === "done" ? task.completed_at : null);
+    const value = task.effective_deadline || task.due_date || task.sla_due_at || expected || (task.status === "done" ? task.completed_at : null);
     if (!value) return null;
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return null;
@@ -2778,13 +5221,13 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
     date.setDate(date.getDate() + periodOffset * 7);
     return startOfWeek(date);
   })();
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
   const weekDays = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
     return date;
   });
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
   const monthDate = addMonths(toDateOnly(new Date()), periodOffset);
   const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
@@ -2794,6 +5237,14 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
   for (let date = new Date(monthGridStart); date <= monthGridEnd; date.setDate(date.getDate() + 1)) {
     monthDays.push(new Date(date));
   }
+  const sidebarMonthDate = viewMode === "month" ? monthDate : weekStart;
+  const sidebarMonthStart = new Date(sidebarMonthDate.getFullYear(), sidebarMonthDate.getMonth(), 1);
+  const sidebarGridStart = startOfWeek(sidebarMonthStart);
+  const sidebarDays = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(sidebarGridStart);
+    date.setDate(sidebarGridStart.getDate() + index);
+    return date;
+  });
   const visibleDays = viewMode === "day" ? [selectedDay] : viewMode === "month" ? monthDays : weekDays;
   const periodStart = visibleDays[0];
   const periodEnd = visibleDays[visibleDays.length - 1];
@@ -2849,18 +5300,39 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
     return Number(b.key) - Number(a.key);
   });
 
-  const viewLabel = ({
-    day: selectedDay.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" }),
-    week: `${weekStart.toLocaleDateString("ru-RU")} - ${weekEnd.toLocaleDateString("ru-RU")}`,
-    month: monthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" }),
-    orders: "Группировка по производственным заказам",
-  })[viewMode];
-  const stepPeriod = (direction) => setPeriodOffset((value) => value + direction);
-  const resetPeriod = () => setPeriodOffset(0);
+  const pickerDate = viewMode === "day" ? selectedDay : viewMode === "month" ? monthDate : weekStart;
+  const jumpToDate = (value) => {
+    if (!value) return;
+    const target = toDateOnly(new Date(`${value}T12:00:00`));
+    if (viewMode === "day") {
+      setPeriodOffset(Math.round((target - today) / 86400000));
+      return;
+    }
+    if (viewMode === "month") {
+      setPeriodOffset((target.getFullYear() - today.getFullYear()) * 12 + target.getMonth() - today.getMonth());
+      return;
+    }
+    const targetWeek = startOfWeek(target);
+    const currentWeek = startOfWeek(today);
+    setPeriodOffset(Math.round((targetWeek - currentWeek) / 604800000));
+  };
   const changeViewMode = (mode) => {
     setViewMode(mode);
     setPeriodOffset(0);
   };
+  const openCalendarDay = (date) => {
+    setViewMode("day");
+    setPeriodOffset(Math.round((toDateOnly(date) - today) / 86400000));
+  };
+  const stepPeriod = (direction) => setPeriodOffset((value) => value + direction);
+  const resetPeriod = () => setPeriodOffset(0);
+  const calendarPeriodTitle = viewMode === "day"
+    ? selectedDay.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
+    : viewMode === "week"
+      ? `${weekStart.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — ${weekEnd.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}`
+      : viewMode === "month"
+        ? monthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
+        : "Задачи по заказам";
   const calendarButton = "inline-flex min-h-10 items-center justify-center rounded-xl border px-4 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0";
   const fieldClass = "w-full min-h-10 appearance-none rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 outline-none transition-all focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10";
 
@@ -2889,7 +5361,7 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
       type="button"
       onClick={() => setActiveTaskId(task.id)}
       title={task.title}
-      className="block w-full rounded-2xl border border-slate-100 bg-white p-3 text-left text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
+      className="task-mini-card block w-full rounded-2xl border border-slate-100 bg-white p-3 text-left text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 min-w-0 break-words font-black leading-snug text-slate-900">{task.title}</span>
@@ -2904,24 +5376,63 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
     </button>
   );
 
+  const calendarToolbar = (
+    <div className="mac-main-toolbar">
+      <h2>{calendarPeriodTitle}</h2>
+      <div className="mac-view-segment">
+        {[
+          ["day", "День"],
+          ["week", "Неделя"],
+          ["month", "Месяц"],
+          ["orders", "По заказам"],
+        ].map(([mode, label]) => (
+          <button type="button" key={mode} className={viewMode === mode ? "active" : ""} onClick={() => changeViewMode(mode)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="mac-toolbar-actions">
+        <div className={`mac-period-navigation ${viewMode === "orders" ? "hidden" : ""}`}>
+          <button type="button" onClick={() => stepPeriod(-1)} aria-label="Предыдущий период"><ChevronLeft size={17} /></button>
+          <button type="button" className="today" onClick={resetPeriod}>Сегодня</button>
+          <button type="button" onClick={() => stepPeriod(1)} aria-label="Следующий период"><ChevronRight size={17} /></button>
+        </div>
+        <button type="button" onClick={() => setManualTaskOpen(true)} className="mac-create-task">
+          <Plus size={16} />
+          <span>Задача</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex h-full w-full max-w-none flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+    <div className={`tasks-calendar-page view-${viewMode} flex h-full w-full max-w-none flex-col gap-6 p-4 sm:p-6 lg:p-8`}>
+      <div className="task-command-header rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-[11px] font-bold text-slate-400">Диспетчерский календарь</p>
-            <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Все заявки</h1>
+          <div className="task-command-copy">
+            <p className="text-[11px] font-bold text-slate-400">Диспетчерская</p>
+            <h1 className="mt-1 max-w-6xl w-full text-2xl font-black text-slate-900 sm:text-3xl">Все задачи без лишнего шума</h1>
             <p className="mt-2 text-sm font-medium text-slate-500">План-график задач по срокам, статусам и ответственным.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setManualTaskOpen(true)} className="task-new-button min-h-12 rounded-2xl bg-[#3F8CFF] px-5 text-sm font-black text-white shadow-sm hover:bg-[#1f78ff]">
+            Новая задача <ArrowRight size={17} />
+          </button>
+        </div>
+
+        <div className="task-summary-strip">
+          <div className="task-summary-main">
+            <span>В активной очереди</span>
+            <strong>{activeTasks.length}</strong>
+            <small>{overdueTasks.length ? `${overdueTasks.length} требуют срочного внимания` : "Просроченных задач нет"}</small>
+          </div>
+          <div className="task-summary-cells">
             {[
-              ["Активно", activeTasks.length, "text-[#3F8CFF]"],
               ["Просрочено", overdueTasks.length, "text-rose-600"],
               ["Без исполнителя", unassignedTasks.length, "text-slate-700"],
               ["Ожидание", waitingTasks.length, "text-amber-700"],
               ["Готово сегодня", doneTodayTasks.length, "text-emerald-700"],
             ].map(([label, value, cls]) => (
-              <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+              <div key={label} className="task-summary-cell">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
                 <div className={`mt-1 text-xl font-black ${cls}`}>{value}</div>
               </div>
@@ -2929,19 +5440,11 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_180px_auto] lg:items-end">
-          <div className="flex flex-wrap gap-2">
-            {viewMode !== "orders" && (
-              <>
-                <button type="button" onClick={() => stepPeriod(-1)} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Назад</button>
-                <button type="button" onClick={resetPeriod} className={`${calendarButton} border-[#3F8CFF] bg-[#3F8CFF] text-white shadow-sm hover:bg-[#1f78ff] hover:shadow-md`}>Сегодня</button>
-                <button type="button" onClick={() => stepPeriod(1)} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Вперед</button>
-              </>
-            )}
-            <div className="inline-flex min-h-10 items-center rounded-2xl border border-slate-100 bg-white px-4 text-xs font-black text-slate-600">
-              {viewLabel}
-            </div>
-          </div>
+        <div className="task-control-panel mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_180px_auto] lg:items-end">
+          <label className={`task-date-picker ${viewMode === "orders" ? "is-hidden" : ""}`}>
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Перейти к дате</span>
+            <input type="date" value={formatIsoDate(pickerDate)} onChange={(event) => jumpToDate(event.target.value)} className={fieldClass} />
+          </label>
           <label className="block">
             <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Статус</span>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={fieldClass}>
@@ -2958,7 +5461,7 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
           </label>
           <button type="button" onClick={reload} className={`${calendarButton} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}>Обновить</button>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="task-view-switcher mt-3 flex flex-wrap gap-2">
           {[
             ["day", "День"],
             ["week", "Неделя"],
@@ -2986,7 +5489,7 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
       ) : (
         <>
           {(overdueTasks.length > 0 || noDateTasks.length > 0) && (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="task-attention-grid grid grid-cols-1 gap-4 xl:grid-cols-2">
               {overdueTasks.length > 0 && (
                 <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -3009,7 +5512,9 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
           )}
 
           {viewMode === "orders" ? (
-            <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+            <div className="mac-orders-view">
+              {calendarToolbar}
+            <div className="task-order-groups grid grid-cols-1 gap-4 2xl:grid-cols-2">
               {orderGroups.length > 0 ? orderGroups.map((group) => {
                 const groupActive = group.tasks.filter((task) => task.status !== "done").length;
                 const groupDone = group.tasks.filter((task) => task.status === "done").length;
@@ -3038,33 +5543,189 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
                 <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-medium text-slate-400">Задач нет.</div>
               )}
             </div>
-          ) : (
-          <div className={`grid grid-cols-1 gap-3 ${viewMode === "day" ? "" : "xl:grid-cols-7"}`}>
-            {visibleDays.map((day) => {
-              const key = formatIsoDate(day);
-              const dayTasks = tasksByDay[key] || [];
-              const isToday = key === formatIsoDate(today);
-              const isCurrentMonth = viewMode !== "month" || day.getMonth() === monthDate.getMonth();
-              return (
-                <section key={key} className={`rounded-3xl border border-slate-100 bg-white p-3 shadow-sm ${viewMode === "day" ? "min-h-[560px]" : "min-h-[320px]"} ${isCurrentMonth ? "" : "opacity-55"}`}>
-                  <div className={`sticky top-0 z-10 mb-3 rounded-2xl border px-3 py-2 backdrop-blur ${isToday ? "border-blue-100 bg-blue-50/80" : "border-slate-100 bg-slate-50/90"}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-black text-slate-900">{day.toLocaleDateString("ru-RU", { weekday: "short" })}</div>
-                        <div className="text-xs font-semibold text-slate-400">{day.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</div>
+            </div>
+          ) : viewMode === "month" ? (
+            <div className="mac-calendar-layout mac-month-layout">
+              <aside className="mac-calendar-sidebar">
+                <div className="mac-mini-calendar">
+                  <div className="mac-mini-calendar-title">
+                    {sidebarMonthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
+                  </div>
+                  <div className="mac-mini-weekdays">
+                    {["П", "В", "С", "Ч", "П", "С", "В"].map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
+                  </div>
+                  <div className="mac-mini-days">
+                    {sidebarDays.map((day) => {
+                      const key = formatIsoDate(day);
+                      const inMonth = day.getMonth() === sidebarMonthDate.getMonth();
+                      return (
+                        <button
+                          type="button"
+                          key={key}
+                          className={`${inMonth ? "" : "muted"} ${key === formatIsoDate(monthDate) ? "selected" : ""} ${key === formatIsoDate(today) ? "today" : ""}`}
+                          onClick={() => jumpToDate(key)}
+                        >
+                          {day.getDate()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mac-calendar-filters">
+                  <h3>Календари</h3>
+                  {[
+                    ["all", "Все задачи", "#6558e8"],
+                    ["in_progress", "В работе", "#3b82f6"],
+                    ["waiting_delivery", "Ожидание", "#e49b31"],
+                    ["done", "Завершённые", "#25a47a"],
+                  ].map(([value, label, color]) => (
+                    <button type="button" key={value} className={statusFilter === value ? "active" : ""} onClick={() => setStatusFilter(value)}>
+                      <i style={{ background: color }} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mac-undated-list">
+                  <div><h3>Без срока</h3><span>{noDateTasks.length}</span></div>
+                  {noDateTasks.slice(0, 4).map((task) => (
+                    <button type="button" key={task.id} onClick={() => setActiveTaskId(task.id)}>
+                      <strong>{task.title}</strong>
+                      <span>{ROLE_LABELS[task.role] || task.role}</span>
+                    </button>
+                  ))}
+                  {!noDateTasks.length && <p>Все активные задачи запланированы.</p>}
+                </div>
+              </aside>
+
+            <div className="mac-calendar-workspace">
+              {calendarToolbar}
+            <section className="mac-month-calendar">
+              <div className="mac-month-title">
+                <h2>{monthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}</h2>
+                <span>{filteredTasks.length} задач</span>
+              </div>
+              <div className="mac-month-weekdays">
+                {["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"].map((label) => <span key={label}>{label}</span>)}
+              </div>
+              <div className="mac-month-grid">
+                {visibleDays.map((day) => {
+                  const key = formatIsoDate(day);
+                  const dayTasks = tasksByDay[key] || [];
+                  const isToday = key === formatIsoDate(today);
+                  const isCurrentMonth = day.getMonth() === monthDate.getMonth();
+                  return (
+                    <div key={key} className={`${isCurrentMonth ? "" : "muted"} ${isToday ? "today" : ""}`}>
+                      <button type="button" className="mac-month-day-number" onClick={() => openCalendarDay(day)}>
+                        {day.getDate()}
+                      </button>
+                      <div className="mac-month-events">
+                        {dayTasks.slice(0, 4).map((task) => (
+                          <button type="button" key={task.id} className={`status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
+                            <i />
+                            <span>{task.title}</span>
+                          </button>
+                        ))}
+                        {dayTasks.length > 4 && <button type="button" onClick={() => openCalendarDay(day)}>Ещё {dayTasks.length - 4}</button>}
                       </div>
-                      <span className="rounded-xl border border-slate-100 bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">{dayTasks.length}</span>
                     </div>
+                  );
+                })}
+              </div>
+            </section>
+            </div>
+            </div>
+          ) : (
+            <div className="mac-calendar-layout">
+              <aside className="mac-calendar-sidebar">
+                <div className="mac-mini-calendar">
+                  <div className="mac-mini-calendar-title">
+                    {sidebarMonthDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
                   </div>
-                  <div className="space-y-2">
-                    {dayTasks.length > 0 ? dayTasks.map(miniTask) : (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center text-xs font-medium text-slate-400">Нет задач</div>
-                    )}
+                  <div className="mac-mini-weekdays">
+                    {["П", "В", "С", "Ч", "П", "С", "В"].map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
                   </div>
-                </section>
-              );
-            })}
-          </div>
+                  <div className="mac-mini-days">
+                    {sidebarDays.map((day) => {
+                      const key = formatIsoDate(day);
+                      const inMonth = day.getMonth() === sidebarMonthDate.getMonth();
+                      const selected = visibleDays.some((visibleDay) => formatIsoDate(visibleDay) === key);
+                      return (
+                        <button
+                          type="button"
+                          key={key}
+                          className={`${inMonth ? "" : "muted"} ${selected ? "selected" : ""} ${key === formatIsoDate(today) ? "today" : ""}`}
+                          onClick={() => jumpToDate(key)}
+                        >
+                          {day.getDate()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mac-calendar-filters">
+                  <h3>Календари</h3>
+                  {[
+                    ["all", "Все задачи", "#6558e8"],
+                    ["in_progress", "В работе", "#3b82f6"],
+                    ["waiting_delivery", "Ожидание", "#e49b31"],
+                    ["done", "Завершённые", "#25a47a"],
+                  ].map(([value, label, color]) => (
+                    <button type="button" key={value} className={statusFilter === value ? "active" : ""} onClick={() => setStatusFilter(value)}>
+                      <i style={{ background: color }} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mac-undated-list">
+                  <div><h3>Без срока</h3><span>{noDateTasks.length}</span></div>
+                  {noDateTasks.slice(0, 4).map((task) => (
+                    <button type="button" key={task.id} onClick={() => setActiveTaskId(task.id)}>
+                      <strong>{task.title}</strong>
+                      <span>{ROLE_LABELS[task.role] || task.role}</span>
+                    </button>
+                  ))}
+                  {!noDateTasks.length && <p>Все активные задачи запланированы.</p>}
+                </div>
+              </aside>
+
+              <div className="mac-calendar-workspace">
+                {calendarToolbar}
+              <section className={`mac-calendar-simple ${viewMode === "day" ? "single-day" : ""}`}>
+                <div className="mac-simple-days-header" style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(${viewMode === "day" ? "520px" : "160px"}, 1fr))` }}>
+                  {visibleDays.map((day) => {
+                    const key = formatIsoDate(day);
+                    return (
+                      <div key={key} className={key === formatIsoDate(today) ? "today" : ""}>
+                        <span>{day.toLocaleDateString("ru-RU", { weekday: "short" })}</span>
+                        <strong>{day.getDate()}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mac-simple-day-grid" style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(${viewMode === "day" ? "520px" : "160px"}, 1fr))` }}>
+                  {visibleDays.map((day) => {
+                    const dayTasks = tasksByDay[formatIsoDate(day)] || [];
+                    return (
+                      <div className="mac-simple-day-column" key={formatIsoDate(day)}>
+                        {dayTasks.map((task) => (
+                          <button type="button" key={task.id} className={`mac-simple-task status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
+                            <span>{TASK_STATUS_LABELS[task.status] || task.status}</span>
+                            <strong>{task.title}</strong>
+                            <small>{task.order_id ? `Заказ #${task.order_id}` : "Без заказа"} · {assigneeName(task)}</small>
+                          </button>
+                        ))}
+                        {!dayTasks.length && <div className="mac-simple-empty">Нет задач</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+              </div>
+            </div>
           )}
         </>
       )}
@@ -3077,6 +5738,7 @@ function TaskCalendar({ endpoint, user, onOpenPage }) {
           onChanged={reload}
         />
       )}
+      {manualTaskOpen && <ManualTaskModal user={user} onClose={() => setManualTaskOpen(false)} onCreated={reload} />}
     </div>
   );
 }
@@ -3160,7 +5822,13 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
         setKanbanError("Закрытую задачу нельзя поставить на холд.");
         return;
       }
-      const res = await fetch(`/api/tasks/${task.id}/hold`, { method: "POST" });
+      const reason = window.prompt("Укажите причину постановки задачи на холд");
+      if (!reason?.trim()) return;
+      const res = await fetch(`/api/tasks/${task.id}/hold`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "hold", reason: reason.trim() }),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setKanbanError(data.detail || "Не удалось поставить задачу на холд");
@@ -3176,7 +5844,13 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
         return;
       }
       if (task.status === "hold") {
-        const resumeRes = await fetch(`/api/tasks/${task.id}/resume`, { method: "POST" });
+        const reason = window.prompt("Укажите причину возобновления задачи");
+        if (!reason?.trim()) return;
+        const resumeRes = await fetch(`/api/tasks/${task.id}/resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "in_progress", reason: reason.trim() }),
+        });
         if (!resumeRes.ok) {
           const data = await resumeRes.json().catch(() => ({}));
           setKanbanError(data.detail || "Не удалось снять задачу с холда");
@@ -3201,7 +5875,13 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
         return;
       }
       if (task.status === "hold") {
-        const resumeRes = await fetch(`/api/tasks/${task.id}/resume`, { method: "POST" });
+        const reason = window.prompt("Укажите причину возврата задачи в назначенные");
+        if (!reason?.trim()) return;
+        const resumeRes = await fetch(`/api/tasks/${task.id}/resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "assigned", reason: reason.trim() }),
+        });
         if (!resumeRes.ok) {
           const data = await resumeRes.json().catch(() => ({}));
           setKanbanError(data.detail || "Не удалось снять задачу с холда");
@@ -3321,21 +6001,17 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
   };
 
   return (
-    <div className="flex h-full w-full max-w-none flex-col gap-4 p-4 sm:p-6 lg:p-8">
-      <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+    <div className="task-kanban-page flex h-full w-full max-w-none flex-col gap-4 p-4 sm:p-6 lg:p-8">
+      <div className="task-kanban-header rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold text-slate-400">Рабочая доска</p>
-            <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">{title}</h1>
+          <div className="task-command-copy">
+            <p className="text-[11px] font-bold text-slate-400">Персональная очередь</p>
+            <h1 className="mt-1 max-w-6xl w-full text-2xl font-black text-slate-900 sm:text-3xl">{title}: от входящих до результата</h1>
             <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-600">
-              Всего: <span className="font-black text-slate-900">{tasks.length}</span>
-            </div>
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-              Активно: <span className="font-black">{activeCount}</span>
-            </div>
+          <div className="task-kanban-summary">
+            <div><span>Всего</span><strong>{tasks.length}</strong></div>
+            <div><span>Активно</span><strong>{activeCount}</strong></div>
             <button type="button" onClick={reload} className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all hover:-translate-y-0.5 hover:bg-slate-50">
               Обновить
             </button>
@@ -3361,7 +6037,7 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
         <div
           ref={boardRef}
           onDragOver={autoScrollBoard}
-          className="kanban-board min-h-0 flex-1 overflow-x-auto rounded-3xl pb-1"
+          className="kanban-board task-kanban-board min-h-0 flex-1 overflow-x-auto rounded-3xl pb-1"
         >
           <div className="flex min-w-max items-start gap-4 pb-4">
             {TASK_KANBAN_COLUMNS.map((column) => {
@@ -3382,7 +6058,7 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
                     setDropTarget(null);
                   }}
                   onDrop={(event) => handleDrop(event, column.key)}
-                  className={`flex min-h-[520px] w-[340px] shrink-0 flex-col rounded-3xl border p-3 transition-all 2xl:w-[380px] ${
+                  className={`task-kanban-column flex min-h-[520px] w-[340px] shrink-0 flex-col rounded-3xl border p-3 transition-all 2xl:w-[380px] ${
                     isActiveDrop
                       ? "border-blue-200 bg-blue-50/70 shadow-sm"
                       : "border-slate-100 bg-slate-50/60"
@@ -3454,50 +6130,139 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
 const Dashboard = ({ user, onOpenPage }) => {
   const { tasks, reload } = useTasks("/api/tasks/mine");
   const [activeTaskId, setActiveTaskId] = useState(null);
+  const [spotlightIndex, setSpotlightIndex] = useState(0);
   const areaCounts = tasks.reduce((acc, task) => {
     const key = ROLE_LABELS[task.role] || task.role;
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
+  const activeTasks = tasks.filter((task) => !["done", "cancelled"].includes(task.status));
+  const inProgressTasks = activeTasks.filter((task) => task.status === "in_progress");
+  const waitingTasks = activeTasks.filter((task) => ["assigned", "open", "hold", "waiting_delivery"].includes(task.status));
+  const overdueTasks = activeTasks.filter((task) => {
+    const rawDate = task.due_date || task.deadline;
+    if (!rawDate) return false;
+    const dueDate = new Date(rawDate);
+    return !Number.isNaN(dueDate.getTime()) && dueDate < new Date();
+  });
+  const spotlightPosition = activeTasks.length ? spotlightIndex % activeTasks.length : 0;
+  const spotlightTask = activeTasks[spotlightPosition];
 
   return (
-    <div className="w-full max-w-none space-y-8 p-4 sm:p-6 lg:p-10">
-      <div>
-        <h1 className="text-3xl font-black text-slate-900">Панель</h1>
-        <p className="text-sm text-slate-500 mt-2">
-          {user.full_name || user.phone || "Пользователь"} · {roleListLabel(user)}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-100 rounded-2xl p-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Мои задачи</p>
-          <p className="text-3xl font-black text-slate-900 mt-2">{tasks.length}</p>
-        </div>
-        {Object.entries(areaCounts).map(([area, count]) => (
-          <div key={area} className="bg-white border border-slate-100 rounded-2xl p-5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{area}</p>
-            <p className="text-3xl font-black text-slate-900 mt-2">{count}</p>
-          </div>
-        ))}
-      </div>
-
-      <section>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-black text-slate-900">Ближайшие задачи</h2>
-          <button onClick={() => onOpenPage("Мои задачи")} className="text-xs font-bold text-blue-600">Все мои задачи</button>
-        </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-          {tasks.slice(0, 4).map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onOpen={onOpenPage}
-              onOpenTask={setActiveTaskId}
-            />
+    <div className="live-crm-dashboard crm-dashboard-v2">
+      <div className="dashboard-flow" aria-label="Производственный поток">
+        <div>
+          {["Заказ", "Комплектация", "Сборка", "Тестирование", "Ремонт", "Упаковка", "Готовая продукция"].map((stage) => (
+            <span key={stage}>{stage}<i /></span>
           ))}
         </div>
-      </section>
+        <div aria-hidden="true">
+          {["Заказ", "Комплектация", "Сборка", "Тестирование", "Ремонт", "Упаковка", "Готовая продукция"].map((stage) => (
+            <span key={stage}>{stage}<i /></span>
+          ))}
+        </div>
+      </div>
+
+      <div className="dashboard-bento">
+        <section className="dashboard-priority-card">
+          <div className="dashboard-priority-top">
+            <div>
+              <span>Следующее действие</span>
+              <h2>{spotlightTask ? spotlightTask.title : "Очередь разобрана"}</h2>
+            </div>
+            {spotlightTask && <span className="dashboard-task-id">#{spotlightTask.id}</span>}
+          </div>
+          {spotlightTask ? (
+            <>
+              <p>{TASK_UX_CONFIG[spotlightTask.task_type]?.purpose || "Откройте задачу, проверьте данные и выполните следующий этап."}</p>
+              <div className="dashboard-priority-meta">
+                <span><Clock3 size={15} />{TASK_STATUS_LABELS[spotlightTask.status] || spotlightTask.status}</span>
+                <span>{ROLE_LABELS[spotlightTask.role] || spotlightTask.role}</span>
+              </div>
+              <div className="dashboard-priority-actions">
+                <button type="button" onClick={() => setActiveTaskId(spotlightTask.id)}>
+                  Перейти к задаче <ArrowRight size={17} />
+                </button>
+                {activeTasks.length > 1 && (
+                  <div>
+                    <button type="button" aria-label="Предыдущая задача" onClick={() => setSpotlightIndex((index) => (index - 1 + activeTasks.length) % activeTasks.length)}><ChevronLeft size={17} /></button>
+                    <span>{spotlightPosition + 1} / {activeTasks.length}</span>
+                    <button type="button" aria-label="Следующая задача" onClick={() => setSpotlightIndex((index) => (index + 1) % activeTasks.length)}><ChevronRight size={17} /></button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="dashboard-clear-state">
+              <span>Активных задач нет. Можно проверить общий производственный поток.</span>
+              <button type="button" onClick={() => onOpenPage("Производство")}>Открыть производство</button>
+            </div>
+          )}
+        </section>
+
+        <section className={`dashboard-attention-card ${overdueTasks.length ? "has-alert" : ""}`}>
+          <CircleAlert size={22} />
+          <span>Требует внимания</span>
+          <strong>{overdueTasks.length}</strong>
+          <p>{overdueTasks.length ? "Просроченные задачи нужно разобрать в первую очередь." : "Просроченных задач нет."}</p>
+          <button type="button" onClick={() => onOpenPage("Мои задачи")}>Проверить очередь <ArrowRight size={15} /></button>
+        </section>
+
+        <button type="button" className="dashboard-kpi-card" onClick={() => onOpenPage("Мои задачи")}>
+          <Play size={19} />
+          <span>В работе</span>
+          <strong>{inProgressTasks.length}</strong>
+          <small>Активные операции</small>
+        </button>
+
+        <button type="button" className="dashboard-kpi-card" onClick={() => onOpenPage("Мои задачи")}>
+          <ListChecks size={19} />
+          <span>Ожидают</span>
+          <strong>{waitingTasks.length}</strong>
+          <small>Можно взять следующими</small>
+        </button>
+
+        <section className="live-task-section dashboard-recent-tasks">
+          <div className="live-card-heading">
+            <div>
+              <span>Рабочая очередь</span>
+              <h2>Ближайшие задачи</h2>
+            </div>
+            <button type="button" onClick={() => onOpenPage("Мои задачи")}>Все задачи</button>
+          </div>
+          <div className="live-task-list">
+            {tasks.slice(0, 5).map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onOpen={onOpenPage}
+                onOpenTask={setActiveTaskId}
+                compact
+              />
+            ))}
+            {tasks.length === 0 && <div className="live-empty">Нет активных задач</div>}
+          </div>
+        </section>
+
+        <aside className="live-areas dashboard-areas">
+          <div className="live-card-heading">
+            <div>
+              <span>Нагрузка</span>
+              <h2>По направлениям</h2>
+            </div>
+          </div>
+          <div className="live-area-list">
+            {Object.entries(areaCounts).map(([area, count], index) => (
+              <button type="button" onClick={() => onOpenPage("Мои задачи")} key={area}>
+                <i style={{ "--area-index": index }} />
+                <span>{area}</span>
+                <strong>{count}</strong>
+              </button>
+            ))}
+            {Object.keys(areaCounts).length === 0 && <div className="live-empty">Нет данных</div>}
+          </div>
+        </aside>
+      </div>
       {activeTaskId && (
         <TaskDetailModal
           taskId={activeTaskId}
@@ -3510,14 +6275,14 @@ const Dashboard = ({ user, onOpenPage }) => {
   );
 };
 
-const AllApplications = ({ user, onOpenPage }) => (
+const AllTasks = ({ user, onOpenPage }) => (
   <TaskCalendar
-    endpoint={userHasRole(user, ["admin", "manager"]) ? "/api/tasks" : "/api/tasks/mine"}
+    endpoint={userHasRole(user, ["admin", "manager", "production_manager"]) ? "/api/tasks" : "/api/tasks/mine"}
     user={user}
     onOpenPage={onOpenPage}
   />
 );
-const MyTasks = ({ user, onOpenPage }) => <TaskKanban endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${roleListLabel(user)}: персональная очередь работ`} onOpenPage={onOpenPage} />;
+const MyTasks = ({ user, onOpenPage }) => <TaskKanban endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${ROLE_LABELS[user.role] || user.role || "Сотрудник"}: персональная очередь работ`} onOpenPage={onOpenPage} />;
 
 function LoginPage({ onLogin, theme, onToggleTheme }) {
   const [phone, setPhone] = useState("+7");
@@ -3620,7 +6385,7 @@ function Personnel({ currentUser }) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users");
     if (res.ok) {
       const data = await res.json();
@@ -3635,27 +6400,16 @@ function Personnel({ currentUser }) {
         is_active: user.is_active,
       }])));
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    queueMicrotask(fetchUsers);
+  }, [fetchUsers]);
 
   const fullName = (user) => {
     const parts = [user.last_name, user.first_name, user.middle_name].filter(Boolean);
     return parts.length ? parts.join(" ") : user.full_name || "ФИО не указано";
   };
-
-  const initials = (user) => {
-    const first = (user.first_name || "").trim()[0];
-    const last = (user.last_name || "").trim()[0];
-    const fallback = (user.full_name || user.phone || user.username || "?").trim()[0];
-    return `${first || fallback || "?"}${last || ""}`.toUpperCase();
-  };
-
-  const UserAvatar = ({ user, size = "md" }) => (
-    <div className={`${size === "lg" ? "h-14 w-14 text-lg" : "h-12 w-12 text-base"} flex shrink-0 items-center justify-center rounded-full bg-[#3F8CFF] font-black text-white shadow-sm shadow-blue-500/20`}>
-      {initials(user)}
-    </div>
-  );
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredUsers = normalizedSearch
@@ -3845,10 +6599,10 @@ function Personnel({ currentUser }) {
         className="hidden flex-1 cursor-default md:block"
         onClick={closePanel}
       />
-      <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+      <div className="personnel-detail-panel h-full w-full max-w-2xl overflow-hidden bg-white shadow-2xl">
         {panelMode === "create" ? (
           <form onSubmit={createUser} className="flex h-full flex-col bg-white">
-            <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div className="z-10 flex shrink-0 flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
               <div>
                 <p className="text-[11px] font-bold text-slate-400">Персонал</p>
                 <h3 className="mt-1 text-xl font-black text-slate-900">Новый сотрудник</h3>
@@ -3859,66 +6613,95 @@ function Personnel({ currentUser }) {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Фамилия *</label>
-                  <input required value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Имя *</label>
-                  <input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Отчество</label>
-                  <input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Телефон</label>
-                  <input
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    onBlur={(e) => setForm({ ...form, phone: defaultPhoneInput(e.target.value) })}
-                    placeholder="9001234567"
-                    className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Пароль *</label>
-                  <input required minLength={6} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-500 mb-2">Роли</label>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {Object.entries(ROLE_LABELS).map(([role, label]) => (
-                      <label key={role} className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={form.roles.includes(role)}
-                          onChange={() => setForm((current) => {
-                            const roles = toggleRole(current.roles, role);
-                            return { ...current, roles, role: roles[0] };
-                          })}
-                        />
-                        {label}
-                      </label>
-                    ))}
+            <div className="flex-1 space-y-5 overflow-y-auto bg-slate-50/60 p-5 sm:p-6">
+              <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-50 text-xs font-black text-violet-700">1</span>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">Личные данные</h4>
+                    <p className="mt-1 text-xs font-medium text-slate-400">Так сотрудник будет отображаться в задачах и назначениях.</p>
                   </div>
                 </div>
-              </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold text-slate-500">Фамилия <span className="text-rose-500">*</span></label>
+                    <input required value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} placeholder="Иванов" className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold text-slate-500">Имя <span className="text-rose-500">*</span></label>
+                    <input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} placeholder="Иван" className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-[11px] font-bold text-slate-500">Отчество <span className="font-medium text-slate-400">— необязательно</span></label>
+                    <input value={form.middle_name} onChange={(e) => setForm({ ...form, middle_name: e.target.value })} placeholder="Иванович" className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-50 text-xs font-black text-violet-700">2</span>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">Вход в систему</h4>
+                    <p className="mt-1 text-xs font-medium text-slate-400">Телефон станет логином. Пароль сотрудник сможет использовать сразу.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold text-slate-500">Телефон <span className="text-rose-500">*</span></label>
+                    <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} onBlur={(e) => setForm({ ...form, phone: defaultPhoneInput(e.target.value) })} inputMode="tel" placeholder="+7 900 123-45-67" className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold text-slate-500">Временный пароль <span className="text-rose-500">*</span></label>
+                    <input required minLength={6} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Не менее 6 символов" className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-50 text-xs font-black text-violet-700">3</span>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">Роли и доступ</h4>
+                      <p className="mt-1 text-xs font-medium text-slate-400">Можно выбрать несколько рабочих ролей.</p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-xl bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-500">Выбрано: {form.roles.length}</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {Object.entries(ROLE_LABELS).map(([role, label]) => {
+                    const selected = form.roles.includes(role);
+                    return (
+                      <label key={role} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition ${selected ? "border-violet-200 bg-violet-50 text-violet-800 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/40"}`}>
+                        <input type="checkbox" checked={selected} onChange={() => setForm((current) => {
+                          const roles = toggleRole(current.roles, role);
+                          return { ...current, roles, role: roles[0] };
+                        })} className="h-4 w-4 accent-violet-600" />
+                        <span className="min-w-0 flex-1">{label}</span>
+                        {selected && <span className="text-[10px] font-black text-violet-600">Выбрано</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
 
-            <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
-              <button className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md">
-                Создать сотрудника
+            <div className="shrink-0 border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+              <div className="mb-3 flex items-center justify-between gap-3 text-xs">
+                <span className="font-medium text-slate-400">Обязательные поля отмечены звёздочкой</span>
+                <span className="font-bold text-slate-600">{form.roles.length} {russianCountLabel(form.roles.length, "роль", "роли", "ролей")}</span>
+              </div>
+              <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-violet-600 bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md">
+                Создать сотрудника <ArrowRight size={17} />
               </button>
             </div>
           </form>
         ) : selectedUser && (
           <form onSubmit={(e) => { e.preventDefault(); updateUser(selectedUser, selectedDraft); }} className="flex h-full flex-col bg-white">
-            <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div className="personnel-detail-header z-10 flex shrink-0 flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
               <div className="flex min-w-0 items-center gap-4">
-                <UserAvatar user={selectedUser} size="lg" />
+                <PersonnelAvatar user={selectedUser} size="lg" />
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold text-slate-400">Карточка сотрудника</p>
                   <h3 className="mt-1 text-xl font-black text-slate-900 break-words">{fullName(selectedUser)}</h3>
@@ -3930,9 +6713,13 @@ function Personnel({ currentUser }) {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+            <div className="flex-1 overflow-y-auto bg-slate-50/60 p-5 sm:p-6">
               <div className="flex flex-col gap-5">
-                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4">
+                    <h4 className="text-sm font-black text-slate-900">Личные данные</h4>
+                    <p className="mt-1 text-xs font-medium text-slate-400">Имя и контакты, которые отображаются в задачах.</p>
+                  </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-500 mb-2">Фамилия</label>
@@ -3957,44 +6744,54 @@ function Personnel({ currentUser }) {
                       />
                     </div>
                   </div>
-                </div>
+                </section>
 
-                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-2">Роли</label>
-                      <div className="grid grid-cols-1 gap-2">
-                        {Object.entries(ROLE_LABELS).map(([role, label]) => (
-                          <label key={role} className="flex min-h-11 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
+                      <h4 className="text-sm font-black text-slate-900">Роли и доступ</h4>
+                      <p className="mt-1 text-xs font-medium text-slate-400">Определяют рабочие разделы и доступные действия.</p>
+                    </div>
+                    <span className={`shrink-0 rounded-xl px-2.5 py-1.5 text-[10px] font-bold ${selectedDraft.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selectedDraft.is_active ? "Доступ включён" : "Доступ отключён"}</span>
+                  </div>
+                  <label className={`mb-4 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border p-4 transition ${selectedDraft.is_active ? "border-emerald-100 bg-emerald-50/60" : "border-slate-200 bg-slate-50"}`}>
+                    <div>
+                      <span className="block text-sm font-bold text-slate-800">Вход в систему</span>
+                      <span className="mt-1 block text-xs text-slate-500">{selectedDraft.is_active ? "Сотрудник может войти и работать с задачами." : "Вход заблокирован, данные сотрудника сохраняются."}</span>
+                    </div>
+                    <input type="checkbox" checked={Boolean(selectedDraft.is_active)} onChange={(e) => updateDraft(selectedUser.id, { is_active: e.target.checked })} className="h-5 w-5 shrink-0 accent-emerald-600" />
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {Object.entries(ROLE_LABELS).map(([role, label]) => {
+                      const selected = (selectedDraft.roles || userRoles(selectedUser)).includes(role);
+                      return (
+                          <label key={role} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition ${selected ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/40"}`}>
                             <input
                               type="checkbox"
-                              checked={(selectedDraft.roles || userRoles(selectedUser)).includes(role)}
+                              checked={selected}
                               onChange={() => {
                                 const roles = toggleRole(selectedDraft.roles || userRoles(selectedUser), role);
                                 updateDraft(selectedUser.id, { roles, role: roles[0] });
                               }}
+                              className="h-4 w-4 accent-violet-600"
                             />
-                            {label}
+                            <span className="min-w-0 flex-1">{label}</span>
                           </label>
-                        ))}
-                      </div>
-                    </div>
-                    <label className="flex min-h-11 items-center gap-3 self-end rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-600">
-                      <input type="checkbox" checked={Boolean(selectedDraft.is_active)} onChange={(e) => updateDraft(selectedUser.id, { is_active: e.target.checked })} />
-                      Доступ включен
-                    </label>
+                      );
+                    })}
                   </div>
-                </div>
+                </section>
 
-                <div className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
-                  <p className="text-sm font-bold text-slate-900">Пароль</p>
+                <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                  <p className="text-sm font-bold text-slate-900">Смена пароля</p>
+                  <p className="mt-1 text-xs text-slate-400">Введите новый временный пароль длиной не менее 6 символов.</p>
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                    <input type="password" placeholder="Новый пароль" value={passwords[selectedUser.id] || ""} onChange={(e) => setPasswords((current) => ({ ...current, [selectedUser.id]: e.target.value }))} className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10" />
+                    <input type="password" placeholder="Не менее 6 символов" value={passwords[selectedUser.id] || ""} onChange={(e) => setPasswords((current) => ({ ...current, [selectedUser.id]: e.target.value }))} className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10" />
                     <button type="button" onClick={() => changePassword(selectedUser)} disabled={savingId === selectedUser.id || !(passwords[selectedUser.id] || "").trim()} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-all hover:-translate-y-0.5 hover:bg-slate-50 disabled:opacity-50">
                       Сменить пароль
                     </button>
                   </div>
-                </div>
+                </section>
 
                 {currentUser?.id !== selectedUser.id && (
                   <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-4 sm:p-5">
@@ -4013,9 +6810,9 @@ function Personnel({ currentUser }) {
               </div>
             </div>
 
-            <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
-              <button type="submit" disabled={savingId === selectedUser.id} className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md disabled:opacity-50">
-                {savingId === selectedUser.id ? "Сохранение..." : "Сохранить данные"}
+            <div className="shrink-0 border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+              <button type="submit" disabled={savingId === selectedUser.id} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-violet-600 bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md disabled:opacity-50">
+                {savingId === selectedUser.id ? "Сохранение..." : "Сохранить изменения"} <ArrowRight size={17} />
               </button>
             </div>
           </form>
@@ -4074,9 +6871,9 @@ function Personnel({ currentUser }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {filteredUsers.map((user) => (
             <button key={user.id} type="button" onClick={() => openUserPanel(user)} className="rounded-3xl border border-slate-100 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  <UserAvatar user={user} />
+                  <PersonnelAvatar user={user} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="truncate text-lg font-black text-slate-900">{fullName(user)}</h3>
@@ -4087,9 +6884,18 @@ function Personnel({ currentUser }) {
                     <p className="mt-1 text-xs font-mono text-slate-400">{user.phone || "Телефон не указан"} · ID {user.id}</p>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
-                  {roleListLabel(user)}
-                </span>
+                <div className="flex max-w-full shrink-0 flex-wrap justify-start gap-1.5 sm:max-w-[46%] sm:justify-end">
+                  {userRoles(user).slice(0, 3).map((role) => (
+                    <span key={role} className="max-w-full truncate rounded-xl border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700">
+                      {ROLE_LABELS[role] || role}
+                    </span>
+                  ))}
+                  {userRoles(user).length > 3 && (
+                    <span className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-500">
+                      +{userRoles(user).length - 3}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-slate-500 sm:grid-cols-2">
                 <div className="rounded-2xl bg-slate-50 px-3 py-2">
@@ -4111,7 +6917,7 @@ function Personnel({ currentUser }) {
         </div>
       )}
 
-      {panel}
+      {panel && createPortal(panel, document.body)}
     </div>
   );
 }
@@ -4122,11 +6928,13 @@ export default function App() {
   const [taskChangeVersion, setTaskChangeVersion] = useState(0);
   const [user, setUser] = useState(null);
   const [booting, setBooting] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("smart_factory_theme");
     if (savedTheme) return savedTheme;
     return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
+  const workspaceRef = useRef(null);
 
   const logout = () => {
     clearToken();
@@ -4146,6 +6954,78 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+  }, [activePage]);
+
+  useGSAP(() => {
+    if (!workspaceRef.current) return;
+    gsap.fromTo(
+      workspaceRef.current,
+      { autoAlpha: 0.82 },
+      { autoAlpha: 1, duration: 0.28, ease: "power2.out", clearProps: "opacity,visibility" },
+    );
+    const cards = workspaceRef.current.querySelectorAll(
+      ".live-metric, .live-task-section, .live-areas, .crm-page-card, .dashboard-priority-card, .dashboard-attention-card, .dashboard-kpi-card",
+    );
+    if (cards.length) {
+      gsap.fromTo(
+        cards,
+        { autoAlpha: 0, y: 14 },
+        { autoAlpha: 1, y: 0, duration: 0.38, stagger: 0.045, ease: "power2.out", clearProps: "transform,opacity,visibility" },
+      );
+    }
+    const inlineImage = workspaceRef.current.querySelector(".dashboard-inline-image");
+    if (inlineImage) {
+      gsap.fromTo(
+        inlineImage,
+        { scale: 0.82, autoAlpha: 0.35 },
+        {
+          scale: 1,
+          autoAlpha: 1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: inlineImage,
+            start: "top 92%",
+            end: "bottom 22%",
+            scrub: 0.6,
+          },
+        },
+      );
+    }
+    const taskIntro = workspaceRef.current.querySelector(".task-command-copy > p:last-child");
+    if (taskIntro) {
+      gsap.fromTo(
+        taskIntro,
+        { autoAlpha: 0.18 },
+        {
+          autoAlpha: 1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: taskIntro,
+            start: "top 92%",
+            end: "bottom 62%",
+            scrub: 0.5,
+          },
+        },
+      );
+    }
+    const media = gsap.matchMedia();
+    media.add("(min-width: 1101px)", () => {
+      const kanbanHeader = workspaceRef.current?.querySelector(".task-kanban-header");
+      if (!kanbanHeader) return undefined;
+      const trigger = ScrollTrigger.create({
+        trigger: kanbanHeader,
+        start: "top 72px",
+        end: "+=120",
+        pin: true,
+        pinSpacing: false,
+      });
+      return () => trigger.kill();
+    });
+    return () => media.revert();
+  }, { scope: workspaceRef, dependencies: [activePage], revertOnUpdate: true });
+
+  useEffect(() => {
     const loadUser = async () => {
       if (!getToken()) {
         setBooting(false);
@@ -4162,7 +7042,7 @@ export default function App() {
     if (!user) return false;
     if (userHasRole(user, ["admin"])) return true;
     if (page === "Персонал") return false;
-    if (["Панель", "Все заявки", "Мои задачи"].includes(page)) return true;
+    if (["Панель", "Все заявки", "Все задачи", "Мои задачи"].includes(page)) return true;
     if (page === "База изделий") return userHasRole(user, ["engineer", "manager", "production", "assembler", "tester", "repair_engineer"]);
     if (page === "Склад ТМЦ") return userHasRole(user, ["warehouse", "manager", "engineer", "procurement", "packer"]);
     if (page === "Склад готовой продукции") return userHasRole(user, ["warehouse", "manager", "production", "packer"]);
@@ -4179,13 +7059,14 @@ export default function App() {
 
     switch (activePage) {
       case "Панель": return <Dashboard user={user} onOpenPage={openPage} />;
-      case "Все заявки": return <AllApplications user={user} onOpenPage={openPage} />;
+      case "Все заявки": return <ManufacturingPage user={user} onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
+      case "Все задачи": return <AllTasks user={user} onOpenPage={openPage} />;
       case "Мои задачи": return <MyTasks user={user} onOpenPage={openPage} />;
       case "Персонал": return <Personnel currentUser={user} />;
       case "База изделий": return <GadgetsBase />;
       case "Склад ТМЦ": return <InventoryBase user={user} />;
       case "Склад готовой продукции": return <FinishedGoodsBase user={user} />;
-      case "Производство": return <ManufacturingPage onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
+      case "Производство": return <ManufacturingPage user={user} onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
       default: return <Dashboard user={user} onOpenPage={openPage} />;
     }
   };
@@ -4194,19 +7075,26 @@ export default function App() {
   if (!user) return <LoginPage onLogin={setUser} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
 
   return (
-    <div className={`app-shell flex h-screen p-5 gap-5 ${theme === "dark" ? "theme-dark" : ""}`}>
-      <Sidebar
+    <div className={`crm-app app-shell ${theme === "dark" ? "theme-dark" : ""}`}>
+      <CrmSidebar
         activePage={activePage}
-        setActivePage={openPage}
+        onOpenPage={openPage}
         user={user}
         onLogout={logout}
         canOpen={canOpen}
-        theme={theme}
-        onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
       />
-      <main className="app-main">
-        {renderContent()}
-      </main>
+      <div className="crm-main">
+        <CrmTopbar
+          onMenu={() => setMobileMenuOpen(true)}
+          onOpenPage={openPage}
+          activePage={activePage}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+        />
+        <main ref={workspaceRef} className="app-main crm-workspace-content w-full max-w-full overflow-x-hidden">{renderContent()}</main>
+      </div>
       {activeTaskId && (
         <TaskDetailModal
           taskId={activeTaskId}

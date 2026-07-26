@@ -23,6 +23,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
   const [drawingNumber, setDrawingNumber] = useState("");
   const [revision, setRevision] = useState("1.0");
   const [testChecklist, setTestChecklist] = useState([]);
+  const [requiresPreassemblyTest, setRequiresPreassemblyTest] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const isEditMode = !!(initialData && initialData.id);
@@ -36,17 +37,21 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
     : "p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full font-sans text-slate-800";
 
   useEffect(() => {
-    if (isEditMode) {
-      setName(initialData.name || "");
-      setDrawingNumber(initialData.drawing_number || "");
-      setRevision(initialData.revision || initialData.version || "1.0");
-      setTestChecklist((initialData.test_checklist || []).map((item) => typeof item === "string" ? item : item.label || ""));
-    } else {
-      setName("");
-      setDrawingNumber("");
-      setRevision("1.0");
-      setTestChecklist([]);
-    }
+    queueMicrotask(() => {
+      if (isEditMode) {
+        setName(initialData.name || "");
+        setDrawingNumber(initialData.drawing_number || "");
+        setRevision(initialData.revision || initialData.version || "1.0");
+        setTestChecklist((initialData.test_checklist || []).map((item) => typeof item === "string" ? item : item.label || ""));
+        setRequiresPreassemblyTest(!!initialData.requires_preassembly_test);
+      } else {
+        setName("");
+        setDrawingNumber("");
+        setRevision("1.0");
+        setTestChecklist([]);
+        setRequiresPreassemblyTest(false);
+      }
+    });
   }, [initialData, isEditMode]);
 
   const addChecklistItem = () => {
@@ -72,6 +77,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
             drawing_number: drawingNumber.trim() || null,
             revision: revision.trim() || "1.0",
             test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
+            requires_preassembly_test: requiresPreassemblyTest,
           }
         : {
             name: name.trim(),
@@ -79,6 +85,7 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
             version: revision.trim() || "1.0",
             is_final: !isSubAssemblyUnit,
             test_checklist: testChecklist.map((item) => item.trim()).filter(Boolean),
+            requires_preassembly_test: requiresPreassemblyTest,
             components: [],
           };
 
@@ -148,6 +155,30 @@ export default function ProductForm({ onBack, initialData = null, panel = false 
         </section>
 
         <section className="bg-white border border-slate-100 rounded-3xl shadow-sm overflow-hidden">
+          <div className="p-5 sm:p-6 border-b border-slate-100">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={requiresPreassemblyTest}
+              onClick={() => setRequiresPreassemblyTest((current) => !current)}
+              className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
+                requiresPreassemblyTest
+                  ? "border-blue-200 bg-blue-50"
+                  : "border-slate-200 bg-slate-50/70 hover:bg-slate-50"
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-slate-900">Проверять до сборки в корпус</span>
+                <span className="mt-1 block text-xs font-semibold leading-relaxed text-slate-500">
+                  Система сначала создаст задачу тестировщику. Годные устройства попадут в пул сборки, бракованные — в ремонт.
+                </span>
+              </span>
+              <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${requiresPreassemblyTest ? "bg-blue-600" : "bg-slate-300"}`}>
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${requiresPreassemblyTest ? "translate-x-6" : "translate-x-1"}`} />
+              </span>
+            </button>
+          </div>
+
           <div className="p-5 sm:p-6 border-b border-slate-100">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Основные данные</p>
             <div className="space-y-5">

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ProductForm from "./ProductForm";
 import BOMItemForm from "./BOMItemForm";
 
@@ -141,7 +142,7 @@ const ProductFilesPanel = ({ product, onChanged }) => {
 
   return (
     <div className="mb-6">
-      <div className="border border-slate-100 rounded-3xl bg-white p-5 shadow-sm">
+      <div className="product-detail-section border border-slate-100 bg-white p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div>
             <h3 className="text-xl font-black text-slate-900">Файлы изделия</h3>
@@ -213,19 +214,18 @@ const BOMRow = ({
   const [editQty, setEditQty] = useState(item?.quantity || 1);
   const [editDesignators, setEditDesignators] = useState(item?.designators || "");
   const [isSaving, setIsSaving] = useState(false);
+  const safeItem = item || {};
   const bomDesignName = item?.design_name || item?.name || "Без названия";
 
-  if (!item) return null;
-
   // Ищем данные узла в общем списке продуктов для глубокой проверки
-  const subProductData = (item.resource_type === "product" || item.resource_type === "subassembly") && productsList
-    ? productsList.find(p => p.id === item.resource_id)
+  const subProductData = (safeItem.resource_type === "product" || safeItem.resource_type === "subassembly") && productsList
+    ? productsList.find(p => p.id === safeItem.resource_id)
     : null;
 
-  const itemType = item.item_type || ((item.resource_type === "product" || item.resource_type === "subassembly") ? "assembly" : "component");
+  const itemType = safeItem.item_type || ((safeItem.resource_type === "product" || safeItem.resource_type === "subassembly") ? "assembly" : "component");
   const isOperation = itemType === "operation";
   const isSub = itemType === "assembly" || !!subProductData;
-  const directChildren = item.children || [];
+  const directChildren = safeItem.children || [];
   const hasNestedContent = isSub && (
     directChildren.length > 0 ||
     subProductData?.sections?.some((section) => section.items?.length)
@@ -233,13 +233,13 @@ const BOMRow = ({
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== "all" || selectedCategory !== "all";
   const shouldShowNestedContent = isExpanded || hasActiveFilters;
 
-  const hasWarehouseLink = isOperation || (item.resource_id !== null && item.resource !== null);
-  const warehouseName = isOperation ? (item.operation_role || "Работа / операция") : (item.resource?.name || "");
-  const warehousePartNumber = item.resource?.part_number || item.resource?.drawing_number || "";
-  const alternatives = Array.isArray(item.alternatives) ? item.alternatives : [];
+  const hasWarehouseLink = isOperation || (safeItem.resource_id != null && safeItem.resource != null);
+  const warehouseName = isOperation ? (safeItem.operation_role || "Работа / операция") : (safeItem.resource?.name || "");
+  const warehousePartNumber = safeItem.resource?.part_number || safeItem.resource?.drawing_number || "";
+  const alternatives = Array.isArray(safeItem.alternatives) ? safeItem.alternatives : [];
   const alternativesQty = alternatives.reduce((sum, alternative) => sum + Number(alternative.quantity || 0), 0);
   const filteredProducts = availableProducts
-    .filter((product) => product.id !== item.product_id)
+    .filter((product) => product.id !== safeItem.product_id)
     .filter((product) => {
       const query = warehouseSearch.trim().toLowerCase();
       if (!query) return true;
@@ -289,6 +289,8 @@ const BOMRow = ({
 
     return () => clearTimeout(timer);
   }, [isEditing, alternativeSearch, bomDesignName, isOperation, isSub]);
+
+  if (!item) return null;
 
   // --- ЛОГИКА ФИЛЬТРАЦИИ ---
   const matchesSearch =
@@ -920,22 +922,21 @@ export default function GadgetsBase() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch("/api/production/products");
       if (response.ok) {
         const data = await response.json();
         setProducts(Array.isArray(data) ? data : []);
-        if (viewingProduct) {
-          const updated = data.find(p => p.id === viewingProduct.id);
-          if (updated) setViewingProduct(updated);
-        }
+        setViewingProduct((current) => current ? data.find(p => p.id === current.id) || current : current);
       }
     } catch (error) { console.error(error); } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchProducts(); }, []);
+  useEffect(() => {
+    queueMicrotask(fetchProducts);
+  }, [fetchProducts]);
 
   const handleDeleteProductFromBase = async (id, name, e) => {
     e.stopPropagation();
@@ -1062,14 +1063,14 @@ export default function GadgetsBase() {
     const attentionRowsCount = Math.max(totalBomRows - linkedRowsCount, 0);
 
     return (
-      <div className="w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
-        <div className="mb-6">
-          <button onClick={handleGoBackInTree} className="text-blue-600 hover:text-blue-700 font-bold text-xs uppercase tracking-wider mb-4 flex items-center gap-1 transition-colors">
+      <div className="workspace-page product-base-page product-detail-page w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
+        <div className="mb-5">
+          <button onClick={handleGoBackInTree} className="product-detail-back mb-3 flex items-center gap-2 text-xs font-bold transition-colors">
             <span>&larr;</span>
             <span>{historyStack.length > 0 ? "Уровень выше" : "К списку изделий"}</span>
           </button>
 
-          <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6">
+          <div className="product-detail-hero border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
@@ -1081,6 +1082,11 @@ export default function GadgetsBase() {
                     }`}>
                       {viewingProduct.is_subassembly ? "Сборочная единица" : "Готовое изделие"}
                     </span>
+                    {viewingProduct.requires_preassembly_test && (
+                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        Тестирование до сборки в корпус
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 break-words">
                     {viewingProduct.name}
@@ -1117,7 +1123,7 @@ export default function GadgetsBase() {
 
         <ProductFilesPanel product={viewingProduct} onChanged={fetchProducts} />
 
-        <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
+        <div className="product-detail-section mb-5 border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-xl font-black text-slate-900">Чеклист тестирования</h3>
@@ -1147,7 +1153,7 @@ export default function GadgetsBase() {
           )}
         </div>
 
-        <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
+        <div className="product-detail-section product-composition-section mb-0 border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
               <div className="min-w-0">
@@ -1244,7 +1250,7 @@ export default function GadgetsBase() {
         </div>
 
         {/* Вывод дерева спецификации */}
-        <div className="flex flex-col gap-6 w-full">
+        <div className="product-bom-tree flex w-full flex-col gap-4">
           {viewingProduct.tree && viewingProduct.tree.length > 0 ? (
             <div className="flex flex-col gap-2 w-full">
               <div className="flex flex-col gap-2 w-full">
@@ -1304,8 +1310,8 @@ export default function GadgetsBase() {
             </div>
           )}
         </div>
-        {productPanel}
-        {bomPanel}
+        {productPanel && createPortal(productPanel, document.body)}
+        {bomPanel && createPortal(bomPanel, document.body)}
       </div>
     );
   }
@@ -1314,7 +1320,7 @@ export default function GadgetsBase() {
 
   // --- ГЛАВНЫЙ ЭКРАН МОДУЛЯ (БАЗА ИЗДЕЛИЙ) ---
   return (
-    <div className="w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
+    <div className="workspace-page product-base-page w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
       <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
           <div>
@@ -1404,7 +1410,7 @@ export default function GadgetsBase() {
           )}
         </div>
       )}
-      {productPanel}
+      {productPanel && createPortal(productPanel, document.body)}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import InventoryForm from "./InventoryForm";
 
 // Иконки
@@ -40,7 +41,9 @@ export default function InventoryBase({ user }) {
   const [showForm, setShowForm] = useState(false);
   const [editingComponent, setEditingComponent] = useState(null);
   const [selectedComponent, setSelectedComponent] = useState(null);
+  const [componentPanelTab, setComponentPanelTab] = useState("details");
   const [componentMovements, setComponentMovements] = useState([]);
+  const [movementLimit, setMovementLimit] = useState(25);
   const [movementsLoading, setMovementsLoading] = useState(false);
   const [incomingCompId, setIncomingCompId] = useState(null);
   const [incomingQty, setIncomingQty] = useState("");
@@ -104,19 +107,22 @@ export default function InventoryBase({ user }) {
   }, []);
 
   useEffect(() => {
-    if (!selectedComponent?.id) {
-      setComponentMovements([]);
+    if (!selectedComponent?.id || componentPanelTab !== "history") {
+      queueMicrotask(() => {
+        setComponentMovements([]);
+        setMovementsLoading(false);
+      });
       return undefined;
     }
     const controller = new AbortController();
-    setMovementsLoading(true);
-    fetch(`/api/inventory/movements?component_id=${selectedComponent.id}&limit=100`, { signal: controller.signal })
+    queueMicrotask(() => setMovementsLoading(true));
+    fetch(`/api/inventory/movements?component_id=${selectedComponent.id}&limit=${movementLimit}`, { signal: controller.signal })
       .then((res) => res.ok ? res.json() : { items: [] })
       .then((data) => setComponentMovements(Array.isArray(data.items) ? data.items : []))
       .catch((error) => { if (error.name !== "AbortError") console.error(error); })
       .finally(() => setMovementsLoading(false));
     return () => controller.abort();
-  }, [selectedComponent?.id]);
+  }, [selectedComponent?.id, componentPanelTab, movementLimit]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -198,7 +204,7 @@ export default function InventoryBase({ user }) {
   };
 
   return (
-    <div className="w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
+    <div className="workspace-page inventory-page w-full max-w-none p-4 font-sans text-slate-800 antialiased sm:p-6 md:p-10">
       <div className="bg-white border border-slate-100 rounded-3xl shadow-sm p-5 sm:p-6 mb-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -305,7 +311,11 @@ export default function InventoryBase({ user }) {
             {items.map((comp) => (
               <div
                 key={comp.id}
-                onClick={() => setSelectedComponent(comp)}
+                onClick={() => {
+                  setComponentPanelTab("details");
+                  setMovementLimit(25);
+                  setSelectedComponent(comp);
+                }}
                 className="bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all flex flex-col justify-between group min-w-0 cursor-pointer"
               >
                 <div className="min-w-0">
@@ -370,17 +380,17 @@ export default function InventoryBase({ user }) {
         )}
       </div>
 
-      {selectedComponent && !showForm && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
+      {selectedComponent && !showForm && createPortal((
+        <div className="inventory-detail-overlay fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
           <button
             type="button"
             aria-label="Закрыть карточку"
             className="hidden flex-1 cursor-default md:block"
             onClick={closeSidePanel}
           />
-          <div className="h-full w-full max-w-2xl bg-white shadow-2xl">
+          <div className={`inventory-detail-panel h-full w-full bg-white shadow-2xl ${componentPanelTab === "history" ? "max-w-5xl" : "max-w-2xl"}`}>
             <div className="flex h-full flex-col bg-white">
-              <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
+              <div className="inventory-detail-header z-10 flex shrink-0 flex-col gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:flex-row sm:items-start sm:justify-between sm:p-6">
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold text-slate-400">Карточка ТМЦ</p>
                   <h2 className="mt-1 text-xl font-black text-slate-900 break-words">{selectedComponent.name}</h2>
@@ -389,7 +399,17 @@ export default function InventoryBase({ user }) {
                 <button onClick={closeSidePanel} type="button" className={`${buttonStyles.neutral} shrink-0 h-10 px-4`}>Закрыть</button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+              <div className="inventory-detail-tabs flex shrink-0 gap-1 border-b border-slate-100 bg-white px-5 pt-3 sm:px-6">
+                <button type="button" className={componentPanelTab === "details" ? "active" : ""} onClick={() => setComponentPanelTab("details")}>
+                  Карточка
+                </button>
+                <button type="button" className={componentPanelTab === "history" ? "active" : ""} onClick={() => setComponentPanelTab("history")}>
+                  История движения
+                </button>
+              </div>
+
+              <div className="inventory-detail-content flex-1 overflow-y-auto p-5 sm:p-6">
+                {componentPanelTab === "details" ? (
                 <div className="flex flex-col gap-5">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -402,7 +422,7 @@ export default function InventoryBase({ user }) {
                   </div>
                 </div>
 
-                <div>
+                <div className="inventory-detail-section">
                   <h3 className="text-sm font-black text-slate-900">Базовые параметры</h3>
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {[
@@ -418,7 +438,7 @@ export default function InventoryBase({ user }) {
                   </div>
                 </div>
 
-                <div>
+                <div className="inventory-detail-section">
                   <h3 className="text-sm font-black text-slate-900">Характеристики</h3>
                   <div className="mt-3 flex flex-col gap-2">
                     {Object.entries(selectedComponent.specifications || {}).length > 0 ? (
@@ -436,41 +456,55 @@ export default function InventoryBase({ user }) {
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">История движения</h3>
-                  <div className="mt-3 space-y-2">
+                </div>
+                ) : (
+                <div className="inventory-detail-section">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">История движения</h3>
+                    <p className="mt-1 text-xs font-medium text-slate-400">Последние 25 операций по компоненту. История загружается только при открытии вкладки.</p>
+                  </div>
+                  <div className="overflow-x-auto">
                     {movementsLoading ? (
                       <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm text-slate-400">Загрузка истории…</div>
-                    ) : componentMovements.length > 0 ? componentMovements.map((movement) => (
-                      <div key={movement.id} className="rounded-2xl border border-slate-100 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className={`text-sm font-black ${movement.direction === "incoming" ? "text-emerald-700" : "text-rose-700"}`}>
-                              {movement.direction === "incoming" ? "Приход" : "Расход"} · {movement.quantity} шт.
-                            </p>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                              {movement.created_at ? new Date(movement.created_at).toLocaleString("ru-RU") : "—"}
-                              {movement.order_id ? ` · Заказ №${movement.order_id}` : ""}
-                              {movement.task_id ? ` · Задача №${movement.task_id}` : ""}
-                            </p>
-                          </div>
-                          <span className="shrink-0 rounded-xl bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">Остаток: {movement.balance_after}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          <p>Операцию выполнил: <span className="font-bold text-slate-700">{movement.actor_name || "Не указан"}</span></p>
-                          {movement.direction === "outgoing" && <p className="mt-1">Получатель: <span className="font-bold text-slate-700">{movement.counterparty_name || movement.recipient || movement.counterparty_role || "Не указан"}</span></p>}
-                          {movement.note && <p className="mt-1">{movement.note}</p>}
-                        </div>
-                      </div>
-                    )) : (
+                    ) : componentMovements.length > 0 ? (
+                      <table className="inventory-movement-table w-full min-w-[760px] border-separate border-spacing-0 text-left">
+                        <thead>
+                          <tr>
+                            <th>Дата</th>
+                            <th>Операция</th>
+                            <th>Количество</th>
+                            <th>Остаток</th>
+                            <th>Основание</th>
+                            <th>Ответственный</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {componentMovements.map((movement) => (
+                            <tr key={movement.id}>
+                              <td>{movement.created_at ? new Date(movement.created_at).toLocaleString("ru-RU") : "—"}</td>
+                              <td><span className={movement.direction === "incoming" ? "incoming" : "outgoing"}>{movement.direction === "incoming" ? "Приход" : "Расход"}</span></td>
+                              <td className="quantity">{movement.direction === "incoming" ? "+" : "−"}{movement.quantity} шт.</td>
+                              <td>{movement.balance_after ?? "—"} шт.</td>
+                              <td>{movement.order_id ? `Заказ №${movement.order_id}` : movement.task_id ? `Задача №${movement.task_id}` : movement.note || "—"}</td>
+                              <td>{movement.actor_name || "Не указан"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
                       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-400">Движений пока нет.</div>
                     )}
                   </div>
+                  {!movementsLoading && componentMovements.length >= movementLimit && (
+                    <button type="button" onClick={() => setMovementLimit((current) => current + 25)} className="mt-4 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700">
+                      Показать ещё 25 операций
+                    </button>
+                  )}
                 </div>
-                </div>
+                )}
               </div>
-              {canEditInventory && (
-                <div className="border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+              {canEditInventory && componentPanelTab === "details" && (
+                <div className="shrink-0 border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
                   <button onClick={() => openEditForm(selectedComponent)} type="button" className={`${buttonStyles.primary} w-full h-11 px-5`}>
                     <Icons.Edit /> Редактировать
                   </button>
@@ -479,9 +513,9 @@ export default function InventoryBase({ user }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
-      {showForm && (
+      {showForm && createPortal((
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20 backdrop-blur-sm">
           <button
             type="button"
@@ -498,7 +532,7 @@ export default function InventoryBase({ user }) {
             />
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }

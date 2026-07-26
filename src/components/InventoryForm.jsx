@@ -37,7 +37,6 @@ export default function InventoryForm({ onBack, onSuccess, initialData = null, p
   const [voltage, setVoltage] = useState(initialData?.voltage || "");
   const [specRows, setSpecRows] = useState(() => specsToRows(initialData?.specifications));
   const [loading, setLoading] = useState(false);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
   // Состояния для кастомного выпадающего списка
   const [isOpen, setIsOpen] = useState(false);
@@ -50,9 +49,9 @@ export default function InventoryForm({ onBack, onSuccess, initialData = null, p
         if (res.ok) {
           const data = await res.json();
           setCategories(data);
-          if (!selectedCategory && data.length > 0) setSelectedCategory(data[0]);
+          if (data.length > 0) setSelectedCategory((current) => current || data[0]);
         }
-      } catch (err) { console.error(err); } finally { setCategoriesLoading(false); }
+      } catch (err) { console.error(err); }
     };
     fetchCategories();
   }, []);
@@ -102,7 +101,7 @@ export default function InventoryForm({ onBack, onSuccess, initialData = null, p
 
       if (res.ok) { onSuccess(); onBack(); }
       else { const errData = await res.json(); alert(errData.detail); }
-    } catch (err) { alert("Ошибка сети"); } finally { setLoading(false); }
+    } catch { alert("Ошибка сети"); } finally { setLoading(false); }
   };
 
   const inputStyle = "w-full min-h-11 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10";

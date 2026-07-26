@@ -1,16 +1,59 @@
-# React + Vite
+# Проекты — Smart Factory UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Веб-интерфейс CRM/MES для управления заявками, производственными задачами, складом, сборкой, тестированием, ремонтом и упаковкой изделий.
 
-Currently, two official plugins are available:
+## Быстрый запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Требования:
 
-## React Compiler
+- Node.js 20+;
+- запущенный backend `smart-factory-mes` на `http://127.0.0.1:8000`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Vite откроет интерфейс локально и перенаправит запросы `/api/*` на backend. Точный адрес frontend будет указан в терминале.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Для первой локальной установки backend создаёт администратора:
+
+- логин: `admin`;
+- пароль: `admin123`.
+
+Пароль и секрет авторизации необходимо изменить через переменные окружения перед использованием вне локальной разработки.
+
+## Проверка проекта
+
+```bash
+npm test
+```
+
+Команда выполняет ESLint и production-сборку. Отдельные команды:
+
+```bash
+npm run lint
+npm run build
+npm run preview
+```
+
+## Основные разделы
+
+- «Обзор» — состояние работ и отклонения;
+- «Заявки» — производственные заказы и их маршрут;
+- «Все задачи» — календарь, режим по заказам и ручные задачи;
+- «Мои задачи» — персональная очередь;
+- «Команда» — сотрудники и роли;
+- «База изделий» — карточки изделий, BOM, чек-листы и предсборочное тестирование;
+- «Склад ТМЦ» — компоненты, остатки и история движения;
+- «Готовая продукция» — баланс выпущенных изделий;
+- «Производство» — оперативное управление заказами.
+
+## Документация
+
+- [Архитектура и производственный цикл](docs/SYSTEM.md)
+- [Руководство пользователя](docs/USER_GUIDE.md)
+- [Разработка, тестирование и эксплуатация](docs/DEVELOPMENT.md)
+- [Развёртывание в локальной сети](docs/DEPLOYMENT_LAN.md)
+
+Backend находится в соседнем проекте `smart-factory-mes`.

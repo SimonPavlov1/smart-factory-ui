@@ -1,3 +1,11 @@
 node_modules
 dist
 .git
+.env
+.env.*
+.agents
+.idea
+backups
+server-data
+*.dump
+*.bak
