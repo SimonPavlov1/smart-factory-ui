@@ -3,13 +3,14 @@ import { createPortal } from "react-dom";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { ArrowRight, ChevronLeft, ChevronRight, CircleAlert, Clock3, ListChecks, Play, Plus } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, CircleAlert, Clock3, Eye, EyeOff, ListChecks, LockKeyhole, Moon, Phone, Play, Plus, Sun } from "lucide-react";
 import { CrmSidebar, CrmTopbar } from "./components/CrmNavigation.jsx";
 import GadgetsBase from "./components/GadgetsBase.jsx";
 import InventoryBase from "./components/InventoryBase.jsx";
 import FinishedGoodsBase from "./components/FinishedGoodsBase.jsx";
 import ManufacturingPage, { CalendarField } from "./components/ManufacturingPage";
 import { clearToken, getToken, installAuthFetch, setToken } from "./api";
+import projectLogo from "./assets/logo.svg";
 import "./index.css";
 import "./app2.css";
 
@@ -30,6 +31,10 @@ const ROLE_LABELS = {
   production: "Производство",
   production_manager: "Руководитель производства",
 };
+
+const TASK_ROLE_LABELS = Object.fromEntries(
+  Object.entries(ROLE_LABELS).filter(([role]) => role !== "admin"),
+);
 
 const ENABLE_ASSEMBLY_PLANNING = false;
 
@@ -212,6 +217,10 @@ function canManageTasks(user) {
 function userRoles(user) {
   const roles = Array.isArray(user?.roles) ? user.roles : [];
   return roles.length ? roles : user?.role ? [user.role] : [];
+}
+
+function userTaskRoles(user) {
+  return Array.isArray(user?.task_roles) ? user.task_roles : userRoles(user);
 }
 
 function userHasRole(user, roles) {
@@ -1074,6 +1083,9 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [deadlineValue, setDeadlineValue] = useState("");
+  const [deadlineReason, setDeadlineReason] = useState("");
+  const [deadlineSaving, setDeadlineSaving] = useState(false);
   const [assemblyTab, setAssemblyTab] = useState("work");
   const [assemblySerialSearch, setAssemblySerialSearch] = useState("");
   const [assemblySerialsExpanded, setAssemblySerialsExpanded] = useState(false);
@@ -1103,6 +1115,8 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     if (res.ok) {
       const data = await res.json();
       setTask(data);
+      setDeadlineValue(data.due_date ? String(data.due_date).slice(0, 16) : "");
+      setDeadlineReason("");
       if (data.type === "assembler_build") {
         setAssemblySerialSearch("");
         setAssemblySerialsExpanded(false);
@@ -1545,6 +1559,33 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     load();
   };
 
+  const saveDeadline = async () => {
+    const reason = deadlineReason.trim();
+    if (!reason) {
+      setError("Укажите причину установки или изменения срока");
+      return;
+    }
+    setError("");
+    setDeadlineSaving(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/deadline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ due_date: deadlineValue || null, reason }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.detail || "Не удалось изменить дедлайн");
+        return;
+      }
+      setSuccessMessage(deadlineValue ? "Дедлайн сохранён" : "Дедлайн снят");
+      await load();
+      onChanged();
+    } finally {
+      setDeadlineSaving(false);
+    }
+  };
+
   const downloadMaterialForm = async () => {
     const res = await fetch(`/api/tasks/${taskId}/form.xlsx`);
     if (!res.ok) {
@@ -1978,6 +2019,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const assignedAssemblyToMe = assemblyAssignments.some((item) => Number(item.user_id) === Number(user?.id));
   const isAssignedToMe = task.assigned_user_id === user?.id;
   const canTake = ["assigned", "open"].includes(task.status) && (isAssignedToMe || (!task.assigned_user_id && (userHasRole(user, [task.role]) || canManageTasks(user))));
+  const canSetDeadline = userHasRole(user, ["admin", "manager"]) && task.status !== "done";
   const canEditTask = task.status === "in_progress";
   const canCompleteStatus = task.status === "in_progress";
   const canComplete = canCompleteStatus && (
@@ -2302,6 +2344,45 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   <div className="mt-1 text-lg font-black text-blue-800">{value}</div>
                 </div>
               ))}
+            </section>
+          )}
+
+          {canSetDeadline && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="mb-3">
+                <h3 className="text-sm font-black text-slate-900">Дедлайн задачи</h3>
+                <p className="mt-1 text-xs font-semibold text-slate-400">
+                  Менеджер или администратор может установить срок на любом этапе работы.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr_auto] lg:items-end">
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Дата и время</span>
+                  <input
+                    type="datetime-local"
+                    value={deadlineValue}
+                    onChange={(event) => setDeadlineValue(event.target.value)}
+                    className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </label>
+                <label>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Причина изменения</span>
+                  <input
+                    value={deadlineReason}
+                    onChange={(event) => setDeadlineReason(event.target.value)}
+                    placeholder={task.due_date ? "Например: согласован новый срок" : "Например: срок согласован с производством"}
+                    className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={saveDeadline}
+                  disabled={deadlineSaving || !deadlineReason.trim()}
+                  className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {deadlineSaving ? "Сохраняем..." : "Сохранить срок"}
+                </button>
+              </div>
             </section>
           )}
 
@@ -4898,7 +4979,13 @@ function useTasks(endpoint) {
     setLoading(true);
     try {
       const res = await fetch(endpoint);
-      if (res.ok) setTasks(await res.json());
+      if (res.ok) {
+        setTasks(await res.json());
+      } else {
+        setTasks([]);
+      }
+    } catch {
+      setTasks([]);
     } finally {
       setLoading(false);
     }
@@ -5193,6 +5280,14 @@ function TaskCalendar({ endpoint, user }) {
     if (Number.isNaN(date.getTime())) return null;
     return toDateOnly(date);
   };
+  const parseTaskCalendarDate = (task) => {
+    const plannedDate = parseTaskDate(task);
+    if (plannedDate) return plannedDate;
+    if (!task.created_at) return null;
+    const createdDate = new Date(task.created_at);
+    if (Number.isNaN(createdDate.getTime())) return null;
+    return toDateOnly(createdDate);
+  };
 
   const today = toDateOnly(new Date());
   const addMonths = (date, months) => {
@@ -5275,7 +5370,7 @@ function TaskCalendar({ endpoint, user }) {
     return result;
   }, {});
   filteredTasks.forEach((task) => {
-    const date = parseTaskDate(task);
+    const date = parseTaskCalendarDate(task);
     if (!date) return;
     const key = formatIsoDate(date);
     if (date >= periodStart && date <= periodEnd && tasksByDay[key]) {
@@ -5534,7 +5629,7 @@ function TaskCalendar({ endpoint, user }) {
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {group.tasks
                         .slice()
-                        .sort((a, b) => (parseTaskDate(a)?.getTime() || 0) - (parseTaskDate(b)?.getTime() || 0) || a.id - b.id)
+                        .sort((a, b) => (parseTaskCalendarDate(a)?.getTime() || 0) - (parseTaskCalendarDate(b)?.getTime() || 0) || a.id - b.id)
                         .map(miniTask)}
                     </div>
                   </section>
@@ -5624,7 +5719,7 @@ function TaskCalendar({ endpoint, user }) {
                         {dayTasks.slice(0, 4).map((task) => (
                           <button type="button" key={task.id} className={`status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
                             <i />
-                            <span>{task.title}</span>
+                            <span>{!parseTaskDate(task) ? "Без срока · " : ""}{task.title}</span>
                           </button>
                         ))}
                         {dayTasks.length > 4 && <button type="button" onClick={() => openCalendarDay(day)}>Ещё {dayTasks.length - 4}</button>}
@@ -5715,7 +5810,7 @@ function TaskCalendar({ endpoint, user }) {
                           <button type="button" key={task.id} className={`mac-simple-task status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
                             <span>{TASK_STATUS_LABELS[task.status] || task.status}</span>
                             <strong>{task.title}</strong>
-                            <small>{task.order_id ? `Заказ #${task.order_id}` : "Без заказа"} · {assigneeName(task)}</small>
+                            <small>{!parseTaskDate(task) ? "Без срока · " : ""}{task.order_id ? `Заказ #${task.order_id}` : "Без заказа"} · {assigneeName(task)}</small>
                           </button>
                         ))}
                         {!dayTasks.length && <div className="mac-simple-empty">Нет задач</div>}
@@ -5743,8 +5838,14 @@ function TaskCalendar({ endpoint, user }) {
   );
 }
 
-function TaskKanban({ endpoint, user, onOpenPage, title, subtitle }) {
-  const { tasks, loading, reload } = useTasks(endpoint);
+function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = false }) {
+  const { tasks: loadedTasks, loading, reload } = useTasks(endpoint);
+  const tasks = personal
+    ? loadedTasks.filter((task) => (
+      !task.assigned_user_id
+      || Number(task.assigned_user_id) === Number(user?.id)
+    ))
+    : loadedTasks;
   const [activeTaskId, setActiveTaskId] = useState(null);
   const [completingTaskId, setCompletingTaskId] = useState(null);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
@@ -6277,18 +6378,29 @@ const Dashboard = ({ user, onOpenPage }) => {
 
 const AllTasks = ({ user, onOpenPage }) => (
   <TaskCalendar
-    endpoint={userHasRole(user, ["admin", "manager", "production_manager"]) ? "/api/tasks" : "/api/tasks/mine"}
+    endpoint="/api/tasks"
     user={user}
     onOpenPage={onOpenPage}
   />
 );
-const MyTasks = ({ user, onOpenPage }) => <TaskKanban endpoint="/api/tasks/mine" user={user} title="Мои задачи" subtitle={`${ROLE_LABELS[user.role] || user.role || "Сотрудник"}: персональная очередь работ`} onOpenPage={onOpenPage} />;
+const MyTasks = ({ user, onOpenPage }) => (
+  <TaskKanban
+    key={user.id}
+    endpoint="/api/tasks/mine"
+    user={user}
+    personal
+    title="Мои задачи"
+    subtitle={`${ROLE_LABELS[user.role] || user.role || "Сотрудник"}: персональная очередь работ`}
+    onOpenPage={onOpenPage}
+  />
+);
 
 function LoginPage({ onLogin, theme, onToggleTheme }) {
   const [phone, setPhone] = useState("+7");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -6319,45 +6431,85 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
   };
 
   return (
-    <div className={`app-shell min-h-screen flex items-center justify-center p-6 ${theme === "dark" ? "theme-dark" : ""}`}>
-      <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-[28px] border border-slate-100 shadow-sm p-8 space-y-5">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900">Вход в MES</h1>
-          <p className="text-xs text-slate-400 mt-1">Введите телефон и пароль сотрудника</p>
-        </div>
+    <div className={`login-page ${theme === "dark" ? "theme-dark" : ""}`}>
+      <button type="button" onClick={onToggleTheme} className="login-theme-toggle" aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}>
+        {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
+        <span>{theme === "dark" ? "Светлая тема" : "Тёмная тема"}</span>
+      </button>
 
-        {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
+      <main className="login-shell">
+        <section className="login-welcome" aria-label="О системе">
+          <div className="login-brand">
+            <span className="login-brand-mark"><img src={projectLogo} alt="" /></span>
+            <span>Проекты</span>
+          </div>
+          <div className="login-welcome-copy">
+            <p>Управление производством</p>
+            <h1>Вся работа команды — в одном пространстве</h1>
+            <span>Заявки, производство, склад и задачи сотрудников всегда под рукой.</span>
+          </div>
+          <div className="login-orbit" aria-hidden="true"><i /><i /><i /></div>
+        </section>
 
-        <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Телефон</label>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            onBlur={(e) => setPhone(defaultPhoneInput(e.target.value))}
-            placeholder="9001234567"
-            className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-2">Пароль</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500" />
-        </div>
+        <form onSubmit={submit} className="login-form">
+          <div className="login-form-heading">
+            <span className="login-mobile-logo"><img src={projectLogo} alt="" /> Проекты</span>
+            <p>Добро пожаловать</p>
+            <h2>Вход в систему</h2>
+            <span>Используйте телефон и пароль, выданные руководителем.</span>
+          </div>
 
-        <button disabled={loading} className="w-full bg-slate-900 text-white rounded-xl py-3 font-bold text-xs uppercase tracking-widest disabled:bg-slate-300">
-          {loading ? "Вход..." : "Войти"}
-        </button>
+          {error && <div className="login-error" role="alert"><CircleAlert size={18} /><span>{error}</span></div>}
 
-        <button type="button" onClick={onToggleTheme} className="app-theme-toggle">
-          {theme === "dark" ? "Ночная тема" : "Дневная тема"}
-        </button>
+          <label className="login-field">
+            <span>Телефон</span>
+            <div>
+              <Phone size={18} />
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={(e) => setPhone(defaultPhoneInput(e.target.value))}
+                placeholder="+7 900 123-45-67"
+                inputMode="tel"
+                autoComplete="username"
+                autoFocus
+              />
+            </div>
+          </label>
 
-        <p className="text-[11px] text-slate-400">Для старой dev-учетки можно временно ввести admin в поле телефона.</p>
-      </form>
+          <label className="login-field">
+            <span>Пароль</span>
+            <div>
+              <LockKeyhole size={18} />
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Введите пароль"
+                autoComplete="current-password"
+              />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}>
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </label>
+
+          <button disabled={loading || !phone.trim() || !password} className="login-submit">
+            <span>{loading ? "Проверяем данные…" : "Войти в Проекты"}</span>
+            {!loading && <ArrowRight size={18} />}
+          </button>
+
+          <p className="login-help">Не получается войти? Обратитесь к менеджеру или администратору.</p>
+        </form>
+      </main>
     </div>
   );
 }
 
 function Personnel({ currentUser }) {
+  const canManagePersonnel = userHasRole(currentUser, ["admin", "manager"]);
+  const currentUserIsAdmin = userRoles(currentUser).includes("admin");
+  const canEditUser = (user) => canManagePersonnel && (currentUserIsAdmin || !userRoles(user).includes("admin"));
   const [users, setUsers] = useState([]);
   const emptyForm = {
     password: "",
@@ -6367,6 +6519,9 @@ function Personnel({ currentUser }) {
     phone: "+7",
     role: "manager",
     roles: ["manager"],
+    task_roles: [],
+    auto_tasks_enabled: true,
+    manual_assignment_enabled: true,
   };
   const [form, setForm] = useState({
     password: "",
@@ -6376,6 +6531,9 @@ function Personnel({ currentUser }) {
     phone: "+7",
     role: "manager",
     roles: ["manager"],
+    task_roles: [],
+    auto_tasks_enabled: true,
+    manual_assignment_enabled: true,
   });
   const [drafts, setDrafts] = useState({});
   const [passwords, setPasswords] = useState({});
@@ -6397,6 +6555,9 @@ function Personnel({ currentUser }) {
         phone: user.phone || "",
         role: user.role,
         roles: userRoles(user),
+        task_roles: userTaskRoles(user),
+        auto_tasks_enabled: user.auto_tasks_enabled,
+        manual_assignment_enabled: user.manual_assignment_enabled,
         is_active: user.is_active,
       }])));
     }
@@ -6457,6 +6618,9 @@ function Personnel({ currentUser }) {
       phone: user.phone || "",
       role: user.role,
       roles: userRoles(user),
+      task_roles: userTaskRoles(user),
+      auto_tasks_enabled: user.auto_tasks_enabled,
+      manual_assignment_enabled: user.manual_assignment_enabled,
       is_active: user.is_active,
     });
     setPanelMode("edit");
@@ -6500,6 +6664,9 @@ function Personnel({ currentUser }) {
         phone: phone || null,
         role: form.roles[0] || form.role,
         roles: form.roles,
+        task_roles: form.task_roles,
+        auto_tasks_enabled: form.auto_tasks_enabled,
+        manual_assignment_enabled: form.manual_assignment_enabled,
       }),
     });
     if (!res.ok) {
@@ -6525,6 +6692,9 @@ function Personnel({ currentUser }) {
         phone: normalizePhoneInput(patch.phone ?? user.phone ?? ""),
         role: (patch.roles || userRoles(user))[0] || patch.role || user.role,
         roles: patch.roles || userRoles(user),
+        task_roles: patch.task_roles ?? userTaskRoles(user),
+        auto_tasks_enabled: patch.auto_tasks_enabled ?? user.auto_tasks_enabled,
+        manual_assignment_enabled: patch.manual_assignment_enabled ?? user.manual_assignment_enabled,
         is_active: patch.is_active ?? user.is_active,
       }),
     });
@@ -6556,6 +6726,9 @@ function Personnel({ currentUser }) {
         phone: user.phone || null,
         role: userRoles(user)[0] || user.role,
         roles: userRoles(user),
+        task_roles: userTaskRoles(user),
+        auto_tasks_enabled: user.auto_tasks_enabled,
+        manual_assignment_enabled: user.manual_assignment_enabled,
         is_active: user.is_active,
         password,
       }),
@@ -6670,7 +6843,7 @@ function Personnel({ currentUser }) {
                   <span className="shrink-0 rounded-xl bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-500">Выбрано: {form.roles.length}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {Object.entries(ROLE_LABELS).map(([role, label]) => {
+                  {Object.entries(ROLE_LABELS).filter(([role]) => currentUserIsAdmin || role !== "admin").map(([role, label]) => {
                     const selected = form.roles.includes(role);
                     return (
                       <label key={role} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition ${selected ? "border-violet-200 bg-violet-50 text-violet-800 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/40"}`}>
@@ -6684,6 +6857,34 @@ function Personnel({ currentUser }) {
                     );
                   })}
                 </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-4">
+                  <h4 className="text-sm font-black text-slate-900">Получаемые задачи</h4>
+                  <p className="mt-1 text-xs font-medium text-slate-400">Очереди задач настраиваются отдельно от прав доступа.</p>
+                </div>
+                <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {Object.entries(TASK_ROLE_LABELS).map(([role, label]) => (
+                    <label key={role} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 px-3.5 py-3 text-sm font-semibold text-slate-600">
+                      <input type="checkbox" checked={form.task_roles.includes(role)} onChange={() => setForm((current) => ({
+                        ...current,
+                        task_roles: current.task_roles.includes(role)
+                          ? current.task_roles.filter((item) => item !== role)
+                          : [...current.task_roles, role],
+                      }))} className="h-4 w-4 accent-blue-600" />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="mb-2 flex items-center justify-between rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+                  Получает автоматические задачи
+                  <input type="checkbox" checked={form.auto_tasks_enabled} onChange={(e) => setForm({ ...form, auto_tasks_enabled: e.target.checked })} className="h-5 w-5 accent-blue-600" />
+                </label>
+                <label className="flex items-center justify-between rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+                  Разрешено назначать вручную
+                  <input type="checkbox" checked={form.manual_assignment_enabled} onChange={(e) => setForm({ ...form, manual_assignment_enabled: e.target.checked })} className="h-5 w-5 accent-blue-600" />
+                </label>
               </section>
             </div>
 
@@ -6713,7 +6914,7 @@ function Personnel({ currentUser }) {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-slate-50/60 p-5 sm:p-6">
+            <fieldset disabled={!canEditUser(selectedUser)} className="flex-1 overflow-y-auto bg-slate-50/60 p-5 sm:p-6">
               <div className="flex flex-col gap-5">
                 <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-4">
@@ -6762,7 +6963,7 @@ function Personnel({ currentUser }) {
                     <input type="checkbox" checked={Boolean(selectedDraft.is_active)} onChange={(e) => updateDraft(selectedUser.id, { is_active: e.target.checked })} className="h-5 w-5 shrink-0 accent-emerald-600" />
                   </label>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {Object.entries(ROLE_LABELS).map(([role, label]) => {
+                    {Object.entries(ROLE_LABELS).filter(([role]) => currentUserIsAdmin || role !== "admin").map(([role, label]) => {
                       const selected = (selectedDraft.roles || userRoles(selectedUser)).includes(role);
                       return (
                           <label key={role} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition ${selected ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/40"}`}>
@@ -6783,6 +6984,36 @@ function Personnel({ currentUser }) {
                 </section>
 
                 <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4">
+                    <h4 className="text-sm font-black text-slate-900">Получаемые задачи</h4>
+                    <p className="mt-1 text-xs font-medium text-slate-400">Определяют автоматические очереди и возможность ручного назначения.</p>
+                  </div>
+                  <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {Object.entries(TASK_ROLE_LABELS).map(([role, label]) => {
+                      const selected = (selectedDraft.task_roles || []).includes(role);
+                      return (
+                        <label key={role} className={`flex min-h-12 items-center gap-3 rounded-2xl border px-3.5 py-3 text-sm font-semibold ${selected ? "border-blue-200 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-600"} ${canEditUser(selectedUser) ? "cursor-pointer" : "cursor-default opacity-75"}`}>
+                          <input disabled={!canEditUser(selectedUser)} type="checkbox" checked={selected} onChange={() => updateDraft(selectedUser.id, {
+                            task_roles: selected
+                              ? selectedDraft.task_roles.filter((item) => item !== role)
+                              : [...(selectedDraft.task_roles || []), role],
+                          })} className="h-4 w-4 accent-blue-600" />
+                          <span>{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <label className="mb-2 flex items-center justify-between rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+                    Получает автоматические задачи
+                    <input disabled={!canEditUser(selectedUser)} type="checkbox" checked={Boolean(selectedDraft.auto_tasks_enabled)} onChange={(e) => updateDraft(selectedUser.id, { auto_tasks_enabled: e.target.checked })} className="h-5 w-5 accent-blue-600" />
+                  </label>
+                  <label className="flex items-center justify-between rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+                    Разрешено назначать вручную
+                    <input disabled={!canEditUser(selectedUser)} type="checkbox" checked={Boolean(selectedDraft.manual_assignment_enabled)} onChange={(e) => updateDraft(selectedUser.id, { manual_assignment_enabled: e.target.checked })} className="h-5 w-5 accent-blue-600" />
+                  </label>
+                </section>
+
+                <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
                   <p className="text-sm font-bold text-slate-900">Смена пароля</p>
                   <p className="mt-1 text-xs text-slate-400">Введите новый временный пароль длиной не менее 6 символов.</p>
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row">
@@ -6793,7 +7024,7 @@ function Personnel({ currentUser }) {
                   </div>
                 </section>
 
-                {currentUser?.id !== selectedUser.id && (
+                {canEditUser(selectedUser) && currentUser?.id !== selectedUser.id && (
                   <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-4 sm:p-5">
                     <p className="text-sm font-bold text-rose-700">Удаление сотрудника</p>
                     <p className="mt-1 text-xs text-rose-500">Сотрудник будет удален, а его назначение с открытых задач будет снято.</p>
@@ -6808,13 +7039,13 @@ function Personnel({ currentUser }) {
                   </div>
                 )}
               </div>
-            </div>
+            </fieldset>
 
-            <div className="shrink-0 border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
+            {canEditUser(selectedUser) && <div className="shrink-0 border-t border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
               <button type="submit" disabled={savingId === selectedUser.id} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-violet-600 bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-md disabled:opacity-50">
                 {savingId === selectedUser.id ? "Сохранение..." : "Сохранить изменения"} <ArrowRight size={17} />
               </button>
-            </div>
+            </div>}
           </form>
         )}
       </div>
@@ -6832,9 +7063,9 @@ function Personnel({ currentUser }) {
           <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm">
             {filteredUsers.length} из {users.length}
           </div>
-          <button type="button" onClick={openCreatePanel} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md">
+          {canManagePersonnel && <button type="button" onClick={openCreatePanel} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#3F8CFF] bg-[#3F8CFF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1f78ff] hover:shadow-md">
             Добавить сотрудника
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -7041,8 +7272,9 @@ export default function App() {
   const canOpen = (page) => {
     if (!user) return false;
     if (userHasRole(user, ["admin"])) return true;
-    if (page === "Персонал") return false;
-    if (["Панель", "Все заявки", "Все задачи", "Мои задачи"].includes(page)) return true;
+    if (page === "Персонал") return true;
+    if (page === "Все задачи") return userHasRole(user, ["manager"]);
+    if (["Панель", "Все заявки", "Мои задачи"].includes(page)) return true;
     if (page === "База изделий") return userHasRole(user, ["engineer", "manager", "production", "assembler", "tester", "repair_engineer"]);
     if (page === "Склад ТМЦ") return userHasRole(user, ["warehouse", "manager", "engineer", "procurement", "packer"]);
     if (page === "Склад готовой продукции") return userHasRole(user, ["warehouse", "manager", "production", "packer"]);
