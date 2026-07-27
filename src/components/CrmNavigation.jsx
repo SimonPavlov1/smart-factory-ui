@@ -36,6 +36,21 @@ const workspaceItems = [
   { id: "Производство", label: "Производство", icon: Factory },
 ];
 
+const roleLabels = {
+  admin: "Администратор",
+  warehouse: "Кладовщик",
+  manager: "Менеджер",
+  engineer: "Технолог",
+  procurement: "Закупщик",
+  accounting: "Бухгалтер",
+  assembler: "Сборщик",
+  tester: "Тестировщик",
+  repair_engineer: "Инженер-наладчик",
+  packer: "Упаковщик",
+  production: "Производство",
+  production_manager: "Руководитель производства",
+};
+
 function Logo() {
   return <img className="crm-logo" src={projectLogo} alt="" aria-hidden="true" />;
 }
@@ -43,6 +58,13 @@ function Logo() {
 function initials(user) {
   const name = user?.full_name || user?.phone || "Пользователь";
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+}
+
+function userRoleLabel(user) {
+  const roles = Array.isArray(user?.roles) && user.roles.length
+    ? user.roles
+    : user?.role ? [user.role] : [];
+  return roles.map((role) => roleLabels[role] || role).join(" · ") || "Сотрудник";
 }
 
 export function CrmSidebar({
@@ -86,10 +108,10 @@ export function CrmSidebar({
         </nav>
 
         <div className="crm-profile">
-          <span className="crm-avatar violet">{initials(user)}</span>
+          <span className="crm-avatar">{initials(user)}</span>
           <div>
             <strong>{user?.full_name || user?.phone || "Пользователь"}</strong>
-            <span>{user?.role || "Сотрудник"}</span>
+            <span title={userRoleLabel(user)}>{userRoleLabel(user)}</span>
           </div>
           <button type="button" onClick={onLogout} aria-label="Выйти"><LogOut size={17} /></button>
         </div>

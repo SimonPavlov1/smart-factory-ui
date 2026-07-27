@@ -119,22 +119,38 @@
 }
 
 .crm-profile div { display: grid; }
-.crm-profile strong { font-size: 11px; }
-.crm-profile span { color: #6f7487; font-size: 9px; }
+.crm-profile div { min-width: 0; }
+.crm-profile strong {
+  overflow: hidden;
+  color: #f7f8fc;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-profile div > span {
+  overflow: hidden;
+  margin-top: 2px;
+  color: #858b9f;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .crm-profile > svg { color: #666b7e; }
 
 .crm-avatar {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 11px;
-  background: #edeafe;
-  color: #6658d8;
-  font-size: 10px;
-  font-weight: 700;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #3f8cff, #176fe5);
+  color: #fff !important;
+  font-size: 11px !important;
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(29, 112, 229, 0.3);
 }
 
 .crm-avatar.orange { background: #fff0e3; color: #d87e37; }
@@ -2770,10 +2786,53 @@ html.theme-dark .crm-calendar-popover :where(.border-slate-100, .border-slate-20
   border-left: 1px solid var(--crm-line);
 }
 
+html.theme-dark .personnel-detail-panel {
+  --crm-bg: #10131c;
+  --crm-surface: #191d29;
+  --crm-surface-soft: #151923;
+  --crm-ink: #f5f6fa;
+  --crm-muted: #aeb4c4;
+  --crm-line: rgba(255, 255, 255, 0.12);
+  border-left-color: var(--crm-line);
+  background: var(--crm-surface) !important;
+  color: var(--crm-ink);
+}
+
 .personnel-detail-header {
   background:
     radial-gradient(circle at 92% 0%, rgba(93, 78, 232, 0.13), transparent 18rem),
     var(--crm-surface) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(.bg-white, [class*="bg-white/"]) {
+  background-color: var(--crm-surface) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(.bg-slate-50, [class*="bg-slate-50/"], .bg-slate-100) {
+  background-color: var(--crm-surface-soft) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(.text-slate-900, .text-slate-800, .text-slate-700) {
+  color: var(--crm-ink) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(.text-slate-600, .text-slate-500, .text-slate-400) {
+  color: var(--crm-muted) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(.border-slate-100, .border-slate-200) {
+  border-color: var(--crm-line) !important;
+}
+
+html.theme-dark .personnel-detail-panel :where(input, select, textarea) {
+  border-color: var(--crm-line) !important;
+  background: #131722 !important;
+  color: var(--crm-ink) !important;
+}
+
+html.theme-dark .personnel-detail-panel fieldset:disabled :where(input, select, textarea) {
+  color: var(--crm-muted) !important;
+  opacity: 1;
 }
 
 .personnel-detail-header h3 {
