@@ -2652,6 +2652,66 @@ html.theme-dark .crm-calendar-popover :where(.border-slate-100, .border-slate-20
   transition: max-width 220ms ease;
 }
 
+html.theme-dark .inventory-detail-panel {
+  --crm-bg: #10131c;
+  --crm-surface: #191d29;
+  --crm-surface-soft: #151923;
+  --crm-ink: #f5f6fa;
+  --crm-muted: #aeb4c4;
+  --crm-line: rgba(255, 255, 255, 0.12);
+  --crm-primary: #8f83ff;
+  border-left-color: var(--crm-line);
+  background: var(--crm-surface) !important;
+  color: var(--crm-ink);
+}
+
+html.theme-dark .inventory-detail-panel :where(.bg-white, [class*="bg-white/"]) {
+  background-color: var(--crm-surface) !important;
+}
+
+html.theme-dark .inventory-detail-panel :where(.bg-slate-50, [class*="bg-slate-50/"], .bg-slate-100) {
+  background-color: var(--crm-surface-soft) !important;
+}
+
+html.theme-dark .inventory-detail-panel :where(.text-slate-900, .text-slate-800, .text-slate-700) {
+  color: var(--crm-ink) !important;
+}
+
+html.theme-dark .inventory-detail-panel :where(.text-slate-600, .text-slate-500, .text-slate-400) {
+  color: var(--crm-muted) !important;
+}
+
+html.theme-dark .inventory-detail-panel :where(.border-slate-100, .border-slate-200) {
+  border-color: var(--crm-line) !important;
+}
+
+html.theme-dark .inventory-detail-panel .inventory-detail-tabs {
+  border-color: var(--crm-line) !important;
+  background: var(--crm-surface) !important;
+}
+
+html.theme-dark .inventory-detail-panel .inventory-detail-content {
+  background:
+    radial-gradient(circle at 96% 0%, rgba(143, 131, 255, 0.08), transparent 18rem),
+    var(--crm-bg);
+}
+
+html.theme-dark .inventory-detail-panel .inventory-detail-section {
+  border-color: var(--crm-line);
+  background: var(--crm-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+html.theme-dark .inventory-detail-panel .inventory-movement-table :where(td, th) {
+  border-color: var(--crm-line);
+  color: var(--crm-ink);
+}
+
+html.theme-dark .inventory-detail-panel .inventory-movement-table th {
+  background: var(--crm-surface-soft);
+  color: var(--crm-muted);
+}
+
 .inventory-detail-header {
   background:
     radial-gradient(circle at 92% 0%, rgba(93, 78, 232, 0.13), transparent 18rem),
