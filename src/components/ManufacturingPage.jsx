@@ -1520,8 +1520,15 @@ export default function ManufacturingPage({ onOpenTask, taskChangeVersion = 0, c
                 </div>
               </div>
               {isShortagesOpen && (orderDetail.shortages || []).length > 0 && (
-                <div className="overflow-x-auto rounded-2xl border border-rose-100 bg-white">
-                  <table className="w-full min-w-[760px] text-left text-xs">
+                <div className="shortages-table-scroll overflow-x-auto rounded-2xl border border-rose-100 bg-white">
+                  <table className="shortages-table w-full min-w-[760px] text-left text-xs">
+                    <colgroup>
+                      <col className="w-[38%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[13.33%]" />
+                      <col className="w-[13.33%]" />
+                      <col className="w-[13.34%]" />
+                    </colgroup>
                     <thead className="bg-rose-50 text-rose-700">
                       <tr>
                         <th className="px-3 py-3 font-black">Комплектующее</th>
