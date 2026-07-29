@@ -2950,6 +2950,26 @@ html.theme-dark .personnel-detail-panel fieldset:disabled :where(input, select, 
   min-height: 54px;
 }
 
+.workspace-page .shortages-table {
+  table-layout: fixed;
+  overflow: visible;
+  border-radius: 0;
+}
+
+.workspace-page .shortages-table thead {
+  position: static;
+  inset: auto;
+}
+
+.workspace-page .shortages-table :where(th, td) {
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.workspace-page .shortages-table :where(th:first-child, td:first-child) {
+  overflow-wrap: anywhere;
+}
+
 .crm-app.theme-dark .task-summary-main,
 .crm-app.theme-dark .task-work-card,
 .crm-app.theme-dark .task-kanban-column {
