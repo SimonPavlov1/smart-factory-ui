@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { formatYekaterinburgDateTime } from "../dateTime";
 
 function hasRole(user, roles) {
   const userRoles = Array.isArray(user?.roles) && user.roles.length ? user.roles : user?.role ? [user.role] : [];
@@ -124,7 +125,7 @@ export default function FinishedGoodsBase({ user }) {
             )}
 
             <div className="mt-6"><h3 className="text-sm font-black text-slate-900">История движения</h3><div className="mt-3 space-y-2">
-              {movements.length ? movements.map((movement) => <div key={movement.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex justify-between gap-3"><p className={`font-black ${movement.direction === "incoming" ? "text-emerald-700" : "text-rose-700"}`}>{movement.direction === "incoming" ? "Приход" : "Расход"} · {movement.quantity} шт.</p><span className="text-xs font-bold text-slate-500">Остаток {movement.balance_after}</span></div><p className="mt-1 text-xs text-slate-400">{movement.created_at ? new Date(movement.created_at).toLocaleString("ru-RU") : "—"}{movement.order_id ? ` · Заказ №${movement.order_id}` : ""}{movement.task_id ? ` · Задача №${movement.task_id}` : ""}</p><p className="mt-2 text-xs text-slate-600">Операцию выполнил: <b>{movement.actor_name || "Не указан"}</b></p>{movement.direction === "outgoing" && <p className="mt-1 text-xs text-slate-600">Получатель: <b>{movement.counterparty_name || movement.recipient || "Не указан"}</b></p>}{movement.note && <p className="mt-1 text-xs text-slate-500">{movement.note}</p>}</div>) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">Движений пока нет.</div>}
+              {movements.length ? movements.map((movement) => <div key={movement.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex justify-between gap-3"><p className={`font-black ${movement.direction === "incoming" ? "text-emerald-700" : "text-rose-700"}`}>{movement.direction === "incoming" ? "Приход" : "Расход"} · {movement.quantity} шт.</p><span className="text-xs font-bold text-slate-500">Остаток {movement.balance_after}</span></div><p className="mt-1 text-xs text-slate-400">{formatYekaterinburgDateTime(movement.created_at)}{movement.order_id ? ` · Заказ №${movement.order_id}` : ""}{movement.task_id ? ` · Задача №${movement.task_id}` : ""}</p><p className="mt-2 text-xs text-slate-600">Операцию выполнил: <b>{movement.actor_name || "Не указан"}</b></p>{movement.direction === "outgoing" && <p className="mt-1 text-xs text-slate-600">Получатель: <b>{movement.counterparty_name || movement.recipient || "Не указан"}</b></p>}{movement.note && <p className="mt-1 text-xs text-slate-500">{movement.note}</p>}</div>) : <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">Движений пока нет.</div>}
             </div></div>
           </div>
         </div>
