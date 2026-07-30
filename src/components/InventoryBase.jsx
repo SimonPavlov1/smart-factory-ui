@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import InventoryForm from "./InventoryForm";
+import { formatYekaterinburgDateTime } from "../dateTime";
 
 // Иконки
 const Icons = {
@@ -481,7 +482,7 @@ export default function InventoryBase({ user }) {
                         <tbody>
                           {componentMovements.map((movement) => (
                             <tr key={movement.id}>
-                              <td>{movement.created_at ? new Date(movement.created_at).toLocaleString("ru-RU") : "—"}</td>
+                              <td>{formatYekaterinburgDateTime(movement.created_at)}</td>
                               <td><span className={movement.direction === "incoming" ? "incoming" : "outgoing"}>{movement.direction === "incoming" ? "Приход" : "Расход"}</span></td>
                               <td className="quantity">{movement.direction === "incoming" ? "+" : "−"}{movement.quantity} шт.</td>
                               <td>{movement.balance_after ?? "—"} шт.</td>

@@ -1967,6 +1967,318 @@ body {
   background-color: rgba(245, 158, 11, 0.12) !important;
 }
 
+.crm-app.theme-dark .order-attention-panel {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: #191d29;
+}
+
+.crm-app.theme-dark .order-attention-heading {
+  border-color: rgba(251, 113, 133, 0.22);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.48), rgba(76, 29, 49, 0.55)) !important;
+}
+
+.crm-app.theme-dark .order-attention-title {
+  color: #ffe4e6;
+}
+
+.crm-app.theme-dark .order-attention-subtitle {
+  color: #fda4af;
+}
+
+.crm-app.theme-dark .order-attention-count {
+  background: rgba(251, 113, 133, 0.18);
+  color: #fecdd3;
+}
+
+.crm-app.theme-dark .order-attention-item {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #191d29;
+}
+
+.crm-app.theme-dark .order-attention-item:hover {
+  background: #202533;
+}
+
+.crm-app.theme-dark .order-attention-item-title {
+  color: #f8fafc;
+}
+
+.crm-app.theme-dark .order-attention-item-detail {
+  color: #aeb7c8;
+}
+
+.crm-app.theme-dark .order-attention-item-action {
+  color: #93c5fd;
+}
+
+.crm-app.theme-dark .order-attention-clear {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(6, 78, 59, 0.34) !important;
+}
+
+.crm-app.theme-dark .order-attention-clear-title {
+  color: #d1fae5;
+}
+
+.crm-app.theme-dark .order-attention-clear-detail {
+  color: #6ee7b7;
+}
+
+html.theme-dark .shortage-preview-panel {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #191d29;
+}
+
+html.theme-dark .shortage-preview-panel > header {
+  border-color: rgba(251, 113, 133, 0.2);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.42), rgba(76, 29, 49, 0.5)) !important;
+}
+
+html.theme-dark .shortage-preview-panel > header :where(h2) {
+  color: #f8fafc;
+}
+
+html.theme-dark .shortage-preview-panel > header :where(p.text-slate-500) {
+  color: #cbd5e1;
+}
+
+html.theme-dark .shortage-preview-panel :where(table, footer) {
+  background: #191d29;
+}
+
+html.theme-dark .shortage-preview-panel thead {
+  background: #202533;
+  color: #cbd5e1;
+}
+
+html.theme-dark .shortage-preview-panel tbody tr {
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #dbe2ec;
+}
+
+html.theme-dark .shortage-preview-panel tbody .text-slate-900 {
+  color: #f8fafc;
+}
+
+html.theme-dark .shortage-preview-panel tbody .text-slate-500 {
+  color: #aeb7c8;
+}
+
+html.theme-dark .shortage-preview-panel > footer {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .order-supply-table {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #191d29;
+}
+
+.crm-app.theme-dark .order-supply-table > :where(div) {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .order-supply-table thead,
+.crm-app.theme-dark .order-supply-table > div:last-child {
+  background: #202533;
+}
+
+.crm-app.theme-dark .order-supply-table tbody tr {
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #dbe2ec;
+}
+
+.crm-app.theme-dark .order-supply-table tbody tr:hover {
+  background: #202533;
+}
+
+.crm-app.theme-dark .order-supply-table :where(.text-slate-900) {
+  color: #f8fafc;
+}
+
+.crm-app.theme-dark .order-supply-table :where(.text-slate-500, .text-slate-400) {
+  color: #aeb7c8;
+}
+
+.crm-app.theme-dark .order-supply-table :where(.bg-slate-100) {
+  background: #303747;
+}
+
+.workspace-page .order-supply-table thead {
+  position: static;
+  inset: auto;
+}
+
+.crm-app.theme-dark :where(.order-task-register, .order-documents-panel) {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #191d29;
+}
+
+.crm-app.theme-dark :where(.order-task-register, .order-documents-panel) :where(.border-slate-100) {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark :where(.order-task-register, .order-documents-panel) :where(.text-slate-900, .text-slate-700, .text-slate-600) {
+  color: #f1f5f9;
+}
+
+.crm-app.theme-dark :where(.order-task-register, .order-documents-panel) :where(.text-slate-500, .text-slate-400) {
+  color: #aeb7c8;
+}
+
+.crm-app.theme-dark .order-task-register tbody tr:hover {
+  background: #202533;
+}
+
+.crm-app.theme-dark .order-documents-panel article {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .order-history-timeline {
+  background: #111827;
+  border-color: #26344b;
+}
+
+.crm-app.theme-dark .order-history-timeline > div:first-child {
+  border-color: #26344b;
+}
+
+.crm-app.theme-dark .order-history-timeline :where(.text-slate-900, .text-slate-700, .text-slate-600) {
+  color: #e5edf8;
+}
+
+.crm-app.theme-dark .order-history-timeline :where(.text-slate-500, .text-slate-400) {
+  color: #91a2bb;
+}
+
+.crm-app.theme-dark .order-history-timeline [class*="before:bg-slate-200"]::before {
+  background: #34445d;
+}
+
+.crm-app.theme-dark .order-history-timeline article > span {
+  border-color: #111827;
+}
+
+.crm-app.theme-dark .order-history-timeline article > div {
+  background: #172033;
+  border-color: #26344b;
+}
+
+.crm-app.theme-dark .order-history-timeline article > div:hover {
+  background: #1b273b;
+  border-color: #35537a;
+}
+
+.crm-app.theme-dark .order-history-timeline article > div > div:last-child {
+  border-color: #26344b;
+}
+
+.crm-app.theme-dark .order-history-timeline button.bg-white {
+  background: #111827;
+  border-color: #34445d;
+}
+
+.crm-app.theme-dark .order-history-timeline button.bg-blue-50 {
+  background: #172d4d;
+  border-color: #294c77;
+  color: #93c5fd;
+}
+
+.crm-app.theme-dark .order-route {
+  background: #191d29;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.crm-app.theme-dark .order-route :where(.text-slate-900, .text-slate-700) {
+  color: #f1f5f9;
+}
+
+.crm-app.theme-dark .order-route :where(.text-slate-500, .text-slate-400) {
+  color: #aeb7c8;
+}
+
+.crm-app.theme-dark .order-route-steps button:hover {
+  background: #202533;
+}
+
+.crm-app.theme-dark .order-route-steps button[class*="bg-blue-50"] {
+  background: #172d4d;
+}
+
+.crm-app.theme-dark .order-route-steps :where(.bg-white) {
+  background: #191d29;
+  border-color: #495269;
+}
+
+.crm-app.theme-dark .order-route-steps :where(.bg-slate-200) {
+  background: #3a4355;
+}
+
+.crm-app.theme-dark .order-route-detail > div {
+  background: #202533;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .order-route-detail article,
+.crm-app.theme-dark .order-route-detail [class*="bg-white/"] {
+  background: #191d29;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .manufacturing-attention {
+  background: #191d29;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.crm-app.theme-dark .manufacturing-attention :where(.border-slate-100) {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.crm-app.theme-dark .manufacturing-attention :where(.text-slate-900) {
+  color: #f1f5f9;
+}
+
+.crm-app.theme-dark .manufacturing-attention :where(.text-slate-500) {
+  color: #aeb7c8;
+}
+
+.crm-app.theme-dark .manufacturing-attention button:hover {
+  background: #202533;
+}
+
+.crm-app.theme-dark .manufacturing-attention button[class*="bg-blue-50"] {
+  background: #172d4d;
+}
+
+html.theme-dark .quantity-adjustment-panel {
+  background: #191d29;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.theme-dark .quantity-adjustment-panel :where(header, footer) {
+  background: #191d29;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.theme-dark .quantity-adjustment-panel :where(.bg-white, [class*="bg-white/"]) {
+  background: #191d29;
+}
+
+html.theme-dark .quantity-adjustment-panel :where(.bg-slate-50, [class*="bg-slate-50/"]) {
+  background: #202533;
+}
+
+html.theme-dark .quantity-adjustment-panel :where(.border-slate-100, .border-slate-200) {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.theme-dark .quantity-adjustment-panel :where(.text-slate-950, .text-slate-900, .text-slate-800) {
+  color: #f1f5f9;
+}
+
+html.theme-dark .quantity-adjustment-panel :where(.text-slate-500, .text-slate-400) {
+  color: #aeb7c8;
+}
+
 .crm-calendar-popover {
   border-color: var(--crm-line);
   border-radius: 14px !important;

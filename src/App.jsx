@@ -10,6 +10,7 @@ import InventoryBase from "./components/InventoryBase.jsx";
 import FinishedGoodsBase from "./components/FinishedGoodsBase.jsx";
 import ManufacturingPage, { CalendarField } from "./components/ManufacturingPage";
 import { clearToken, getToken, installAuthFetch, setToken } from "./api";
+import { formatYekaterinburgDateTime } from "./dateTime";
 import projectLogo from "./assets/logo.svg";
 import "./index.css";
 import "./app2.css";
@@ -42,6 +43,7 @@ const TASK_PAGE = {
   procurement_purchase: "Все задачи",
   accounting_payment: "Все задачи",
   warehouse_receive_components: "Склад ТМЦ",
+  order_adjustment_return: "Склад ТМЦ",
   warehouse_issue_materials: "Производство",
   repair_issue_materials: "Производство",
   repair_receive_materials: "Производство",
@@ -85,6 +87,13 @@ const TASK_UX_CONFIG = {
     steps: ["Сверить поставку с заказом", "Указать принятое количество", "Зафиксировать расхождения и завершить приёмку"],
     action: "Оприходовать поставку",
     accent: "cyan",
+  },
+  order_adjustment_return: {
+    area: "Возврат материалов",
+    purpose: "Вернуть на склад комплектующие, ставшие лишними после изменения заказа",
+    steps: ["Сверить ведомость возврата", "Принять фактическое количество", "Оприходовать возвращённые позиции"],
+    action: "Принять возврат",
+    accent: "amber",
   },
   warehouse_issue_materials: {
     area: "Выдача материалов",
@@ -257,26 +266,36 @@ function apiErrorMessage(data, fallback) {
 
 function defaultCompletionPayload(task) {
   if (task.type === "procurement_purchase") {
+    const draft = task.payload?.procurement_draft || {};
+    const draftDeliveries = draft.deliveries || [];
     return {
-      invoice: "",
-      expected_date: "",
-      supplier: "",
-      comment: "",
+      invoice: draft.invoice || "",
+      expected_date: draft.expected_date || "",
+      supplier: draft.supplier || "",
+      comment: draft.comment || "",
       invoice_file: null,
       invoice_file_name: "",
-      deliveries: (task.payload?.shortages || []).map((item) => ({
-        component_id: item.component_id,
-        line_uid: item.line_uid,
-        qty: "",
-      })),
+      deliveries: (task.payload?.shortages || []).map((item) => {
+        const saved = draftDeliveries.find((entry) => (
+          entry.line_uid ? entry.line_uid === item.line_uid : entry.component_id === item.component_id
+        ));
+        return {
+          component_id: item.component_id,
+          line_uid: item.line_uid,
+          qty: saved?.qty || "",
+        };
+      }),
     };
   }
-  if (task.type === "warehouse_receive_components") {
+  if (["warehouse_receive_components", "order_adjustment_return"].includes(task.type)) {
+    const sourceItems = task.type === "order_adjustment_return"
+      ? (task.payload?.materials || [])
+      : (task.payload?.shortages || []);
     return {
       closing_docs_file: null,
       closing_docs_file_name: "",
       comment: "",
-      items: (task.payload?.shortages || []).map((item) => ({ component_id: item.component_id, line_uid: item.line_uid, qty: "" })),
+      items: sourceItems.map((item) => ({ component_id: item.component_id, line_uid: item.line_uid, qty: "" })),
     };
   }
   if (task.type === "assembler_build") {
@@ -1098,14 +1117,11 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   const [packingSerialSearch, setPackingSerialSearch] = useState("");
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event) => {
       if (event.key === "Escape") onClose();
     };
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [onClose]);
@@ -1745,6 +1761,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       const data = await res.json();
       onChanged();
       if (["partial", "waiting_delivery"].includes(data.result?.status)) {
+        if (saveOnly) setSuccessMessage(data.result?.message || "Черновик сохранён");
         if (data.result?.materials?.created) {
           const issueIds = data.result.materials.issue_task_ids || [];
           const procurementIds = data.result.materials.procurement_task_ids || [];
@@ -1767,7 +1784,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 
   if (!task) {
     return (
-      <div className="task-fullscreen-shell fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-white">
+      <div className="task-fullscreen-shell flex min-h-[calc(100dvh-72px)] items-center justify-center bg-white">
         <div className="rounded-2xl border border-slate-100 bg-slate-50 p-8 text-sm font-semibold text-slate-400">Загрузка задачи...</div>
       </div>
     );
@@ -1796,7 +1813,9 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   }
 
   const notes = task.payload?.notes || [];
-  const shortages = task.payload?.shortages || [];
+  const shortages = task.type === "order_adjustment_return"
+    ? (task.payload?.materials || [])
+    : (task.payload?.shortages || []);
   const purchases = task.payload?.purchases || [];
   const invoiceAttachments = [
     task.payload?.invoice_attachment,
@@ -1807,7 +1826,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
       candidate.id || candidate.storage_path || candidate.path || candidate.url || candidate.original_name
     ) === fileKey) === index;
   });
-  const orderedItems = task.payload?.ordered_items || (task.type === "warehouse_receive_components" ? shortages : []);
+  const orderedItems = task.payload?.ordered_items || (["warehouse_receive_components", "order_adjustment_return"].includes(task.type) ? shortages : []);
   const receiptHistory = task.payload?.receipt_history || [];
   const transferMaterials = task.payload?.materials || [];
   const materialTransfer = task.payload?.material_transfer || null;
@@ -1947,6 +1966,27 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   }, {});
   const shortageQtyTotal = shortages.reduce((sum, item) => sum + Number(item.shortage_qty || item.qty || 0), 0);
   const deliveryQtyTotal = deliveries.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  const procurementDraftLines = shortages.map((item) => {
+    const delivery = deliveries.find((entry) => (
+      entry.line_uid ? entry.line_uid === item.line_uid : entry.component_id === item.component_id
+    ));
+    const requiredQty = Number(item.shortage_qty || item.qty || 0);
+    const draftQty = Number(delivery?.qty || 0);
+    return {
+      item,
+      delivery,
+      requiredQty,
+      draftQty,
+      remainingQty: Math.max(requiredQty - draftQty, 0),
+      excessQty: Math.max(draftQty - requiredQty, 0),
+      status: draftQty <= 0 ? "empty" : draftQty < requiredQty ? "partial" : draftQty > requiredQty ? "excess" : "complete",
+    };
+  });
+  const procurementSelectedLines = procurementDraftLines.filter((line) => line.draftQty > 0).length;
+  const procurementPartialLines = procurementDraftLines.filter((line) => line.status === "partial").length;
+  const procurementCompleteLines = procurementDraftLines.filter((line) => ["complete", "excess"].includes(line.status)).length;
+  const procurementRemainingTotal = procurementDraftLines.reduce((sum, line) => sum + line.remainingQty, 0);
+  const procurementExcessTotal = procurementDraftLines.reduce((sum, line) => sum + line.excessQty, 0);
   const transferQtyTotal = transferMaterials.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const receiveQtyTotal = orderedItems.reduce((sum, item) => {
     const key = item.line_uid || item.component_id;
@@ -1958,7 +1998,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
     return sum + Math.max(orderedQty - Number(receivedByLine[key] || 0), 0);
   }, 0);
   const finishedGoodsQtyTotal = finishedGoods.reduce((sum, item) => sum + Number(item.qty || 0), 0);
-  const showComponentChecklist = ["procurement_purchase", "warehouse_receive_components"].includes(task.type);
+  const showComponentChecklist = ["procurement_purchase", "warehouse_receive_components", "order_adjustment_return"].includes(task.type);
   const assemblyTargetQty = Number(task.payload?.planned_qty || task.payload?.product_context?.qty || 0);
   const assemblyIssuedQty = Number(task.payload?.issued_qty ?? (task.payload?.materials_complete ? assemblyTargetQty : task.payload?.started_qty || 0));
   const assemblyIssuedBlockers = task.payload?.issued_details?.blockers || [];
@@ -2208,8 +2248,8 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   };
 
   return (
-    <div className="task-fullscreen-shell fixed inset-0 z-50 h-[100dvh] bg-white">
-      <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+    <div className="task-fullscreen-shell min-h-[calc(100dvh-72px)] bg-white">
+      <div className="flex min-h-[calc(100dvh-72px)] w-full flex-col bg-white">
         <div className="task-detail-header shrink-0 border-b border-slate-100 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.09),transparent_42%)] p-5 sm:px-8 sm:py-6">
           <div className="flex justify-between gap-5">
             <div className="max-w-5xl">
@@ -2229,7 +2269,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           </div>
         </div>
 
-        <div className="task-detail-body w-full max-w-none flex-1 space-y-6 overflow-y-auto p-5 sm:p-8">
+        <div className="task-detail-body w-full max-w-none flex-1 space-y-6 p-5 sm:p-8">
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</div>}
           {successMessage && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3">{successMessage}</div>}
           <section className="grid grid-flow-dense grid-cols-1 gap-3 md:grid-cols-3">
@@ -2260,7 +2300,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       {task.payload?.product_context?.product_name || "Изделие"}
                     </h3>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {[task.payload?.product_context?.drawing_number, task.payload?.planned_at && `Распределено ${new Date(task.payload.planned_at).toLocaleString("ru-RU")}`].filter(Boolean).join(" · ")}
+                      {[task.payload?.product_context?.drawing_number, task.payload?.planned_at && `Распределено ${formatYekaterinburgDateTime(task.payload.planned_at)}`].filter(Boolean).join(" · ")}
                     </p>
                   </div>
                   <span className="w-fit rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
@@ -2553,12 +2593,16 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             </section>
           )}
 
-          {task.type === "warehouse_receive_components" && orderedItems.length > 0 && (
+          {["warehouse_receive_components", "order_adjustment_return"].includes(task.type) && orderedItems.length > 0 && (
             <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="text-sm font-black text-slate-900">Приемка поставки</h3>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">Проверьте фактическое поступление и приложите закрывающие документы.</p>
+                  <h3 className="text-sm font-black text-slate-900">{task.type === "order_adjustment_return" ? "Возврат лишних комплектующих" : "Приемка поставки"}</h3>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {task.type === "order_adjustment_return"
+                      ? "Примите обратно только фактически возвращённые неиспользованные комплектующие."
+                      : "Проверьте фактическое поступление и приложите закрывающие документы."}
+                  </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
@@ -2638,7 +2682,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   {receiptHistory.map((entry, index) => (
                     <p key={`${entry.received_at}-${index}`} className="text-xs font-semibold text-emerald-700">
                       Приёмка {index + 1}: {(entry.items || []).reduce((sum, item) => sum + Number(item.qty || 0), 0)} шт.
-                      {entry.received_at ? ` · ${new Date(entry.received_at).toLocaleString("ru-RU")}` : ""}
+                      {entry.received_at ? ` · ${formatYekaterinburgDateTime(entry.received_at)}` : ""}
                     </p>
                   ))}
                 </div>
@@ -2665,7 +2709,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
             </section>
           )}
 
-          {shortages.length > 0 && task.type !== "warehouse_receive_components" && (
+          {shortages.length > 0 && !["warehouse_receive_components", "order_adjustment_return"].includes(task.type) && (
             <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -2675,7 +2719,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                   <p className="mt-1 text-xs font-semibold text-red-600">{shortages.length} поз. · требуется {shortageQtyTotal} шт.</p>
                 </div>
                 {task.type === "procurement_purchase" && (
-                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
                     <div className="rounded-xl border border-red-100 bg-white px-3 py-2">
                       <div className="font-black text-red-700">{shortageQtyTotal || 0}</div>
                       <div className="font-semibold text-slate-400">дефицит</div>
@@ -2684,12 +2728,23 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       <div className="font-black text-blue-700">{deliveryQtyTotal || 0}</div>
                       <div className="font-semibold text-slate-400">в счет</div>
                     </div>
+                    <div className="rounded-xl border border-amber-100 bg-white px-3 py-2">
+                      <div className="font-black text-amber-700">{procurementRemainingTotal || 0}</div>
+                      <div className="font-semibold text-slate-400">останется</div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
+                      <div className="font-black text-emerald-700">{procurementCompleteLines}/{shortages.length}</div>
+                      <div className="font-semibold text-slate-400">закрыто позиций</div>
+                    </div>
                   </div>
                 )}
               </div>
               {task.type === "procurement_purchase" && (
                 <div className="mb-4 rounded-2xl border border-red-100 bg-white p-4">
-                  <p className="mb-3 text-xs font-black text-slate-700">Счет поставщика</p>
+                  <p className="mb-2 text-xs font-black text-slate-700">Счет поставщика</p>
+                  <p className="mb-3 text-xs font-semibold text-slate-500">
+                    Укажите фактическое количество из счёта. Можно закупить меньше потребности частичной партией или больше — например, из-за минимального заказа поставщика.
+                  </p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <PayloadField label="Номер счёта" name="invoice" value={completionPayload.invoice} onChange={changePayload} />
                     <PayloadField label="Поставщик" name="supplier" value={completionPayload.supplier} onChange={changePayload} />
@@ -2720,19 +2775,55 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                       <PayloadField label="Комментарий к закупке" name="comment" value={completionPayload.comment} onChange={changePayload} />
                     </div>
                   </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-[11px] font-bold">
+                    <span className="rounded-xl bg-blue-50 px-3 py-1.5 text-blue-700">Выбрано позиций: {procurementSelectedLines}</span>
+                    {procurementPartialLines > 0 && <span className="rounded-xl bg-amber-50 px-3 py-1.5 text-amber-700">Частично: {procurementPartialLines}</span>}
+                    {procurementExcessTotal > 0 && <span className="rounded-xl bg-violet-50 px-3 py-1.5 text-violet-700">Излишек на склад: {procurementExcessTotal} шт.</span>}
+                    {!completionPayload.supplier && <span className="rounded-xl bg-rose-50 px-3 py-1.5 text-rose-700">Укажите поставщика</span>}
+                    {!completionPayload.invoice && <span className="rounded-xl bg-rose-50 px-3 py-1.5 text-rose-700">Укажите номер счёта</span>}
+                  </div>
                 </div>
               )}
               <div className="space-y-2">
-                {shortages.map((item, itemIndex) => (
-                  <div key={item.line_uid || `${item.component_id}-${itemIndex}`} className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
+                {shortages.map((item, itemIndex) => {
+                  const draftLine = procurementDraftLines[itemIndex];
+                  const stateMeta = {
+                    empty: { label: "Не обработано", className: "bg-slate-100 text-slate-500" },
+                    partial: { label: "Частично", className: "bg-amber-50 text-amber-700" },
+                    complete: { label: "Закрыто", className: "bg-emerald-50 text-emerald-700" },
+                    excess: { label: "С излишком", className: "bg-violet-50 text-violet-700" },
+                  }[draftLine?.status || "empty"];
+                  const coveragePercent = draftLine?.requiredQty
+                    ? Math.min(Math.round((draftLine.draftQty / draftLine.requiredQty) * 100), 100)
+                    : 0;
+                  return (
+                  <div key={item.line_uid || `${item.component_id}-${itemIndex}`} className={`grid grid-cols-1 gap-4 rounded-2xl border bg-white p-4 text-xs text-slate-700 transition md:grid-cols-[minmax(0,1fr)_240px] md:items-center ${
+                    draftLine?.status === "partial" ? "border-amber-200" : draftLine?.status === "excess" ? "border-violet-200" : draftLine?.status === "complete" ? "border-emerald-200" : "border-slate-200"
+                  }`}>
                     <div className="min-w-0">
-                      <div className="font-black break-words text-slate-900">{componentTitle(item)}</div>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="font-black break-words text-slate-900">{componentTitle(item)}</div>
+                        {task.type === "procurement_purchase" && <span className={`rounded-xl px-2.5 py-1 text-[10px] font-black ${stateMeta.className}`}>{stateMeta.label}</span>}
+                      </div>
                       <div className="mt-1 text-[11px] font-semibold text-slate-400">{lineProductLabel(item)}</div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-semibold text-slate-500">
                         <span>Требуется: <b className="text-slate-800">{item.required_qty || item.qty || item.shortage_qty}</b></span>
                         <span>На складе: <b className="text-slate-800">{item.available_qty ?? "—"}</b></span>
                         <span>К закупке: <b className="text-rose-600">{item.shortage_qty || item.qty}</b></span>
                       </div>
+                      {task.type === "procurement_purchase" && (
+                        <div className="mt-3">
+                          <div className="mb-1.5 flex justify-between text-[10px] font-bold text-slate-400">
+                            <span>Покрытие текущим счётом</span>
+                            <span>{coveragePercent}%</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                            <div className={`h-full rounded-full transition-all ${
+                              draftLine?.status === "partial" ? "bg-amber-400" : draftLine?.status === "excess" ? "bg-violet-500" : "bg-emerald-500"
+                            }`} style={{ width: `${coveragePercent}%` }} />
+                          </div>
+                        </div>
+                      )}
                       {(item.expected_date || item.invoice || item.supplier) && (
                         <div className="mt-1 break-words text-slate-400">
                           {[item.expected_date && `Дата ${item.expected_date}`, item.invoice && `Счет ${item.invoice}`, item.supplier].filter(Boolean).join(" · ")}
@@ -2749,7 +2840,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                                 <input
                                   type="number"
                                   min="0"
-                                  max={item.shortage_qty || item.qty}
+                                  step="any"
                                   placeholder="0"
                                   value={delivery.qty || ""}
                                   onChange={(e) => changeDelivery(index, { qty: e.target.value })}
@@ -2759,12 +2850,22 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                               </div>
                               <button type="button" onClick={() => changeDelivery(index, { qty: String(item.shortage_qty || item.qty || 0) })} className="rounded-xl border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 hover:bg-blue-100">Всё</button>
                             </div>
+                            {Number(delivery.qty || 0) > Number(item.shortage_qty || item.qty || 0) && (
+                              <span className="mt-2 block text-[11px] font-bold text-amber-700">
+                                Излишек {Number(delivery.qty || 0) - Number(item.shortage_qty || item.qty || 0)} шт. будет оприходован на склад.
+                              </span>
+                            )}
+                            {Number(delivery.qty || 0) > 0 && Number(delivery.qty || 0) < Number(item.shortage_qty || item.qty || 0) && (
+                              <span className="mt-2 block text-[11px] font-bold text-amber-700">
+                                После счёта останется закупить {Number(item.shortage_qty || item.qty || 0) - Number(delivery.qty || 0)} шт.
+                              </span>
+                            )}
                           </label>
                         ))}
                       </div>
                     )}
                   </div>
-                ))}
+                );})}
               </div>
             </section>
           )}
@@ -3567,7 +3668,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
 	                      <div className="space-y-3">
 	                        {materialRequests.map((request, index) => (
 	                          <div key={`${request.created_at}-${index}`} className="rounded-xl border border-amber-100 bg-white p-3 text-xs">
-		                            <div className="font-black text-slate-800">Заявка {index + 1}{request.created_at ? ` · ${new Date(request.created_at).toLocaleString("ru-RU")}` : ""}</div>
+		                            <div className="font-black text-slate-800">Заявка {index + 1}{request.created_at ? ` · ${formatYekaterinburgDateTime(request.created_at)}` : ""}</div>
                               {request.request_reason && (
                                 <div className="mt-1 font-semibold text-slate-600">Обоснование: {request.request_reason}</div>
                               )}
@@ -4331,7 +4432,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
                     <div className="space-y-3">
                       {materialRequests.map((request, index) => (
                         <div key={`${request.created_at}-${index}`} className="rounded-xl border border-amber-100 bg-white p-3 text-xs">
-                          <div className="font-black text-slate-800">Заявка {index + 1}{request.created_at ? ` · ${new Date(request.created_at).toLocaleString("ru-RU")}` : ""}</div>
+                          <div className="font-black text-slate-800">Заявка {index + 1}{request.created_at ? ` · ${formatYekaterinburgDateTime(request.created_at)}` : ""}</div>
                           {request.request_reason && <div className="mt-1 font-semibold text-slate-600">Обоснование: {request.request_reason}</div>}
                           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                             <div>
@@ -4558,11 +4659,21 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
           </section>}
         </div>
 
-        <div className="task-detail-actionbar flex shrink-0 items-center justify-between border-t border-slate-100 bg-white p-4 sm:px-8 sm:py-5">
-          <button onClick={() => onClose()} className="text-xs font-bold text-slate-500">Закрыть</button>
+        <div className="task-detail-actionbar sticky bottom-0 z-20 flex shrink-0 items-center justify-between border-t border-slate-100 bg-white/95 p-4 backdrop-blur sm:px-8 sm:py-5">
+          <button onClick={() => onClose()} className="text-xs font-bold text-slate-500">← Вернуться назад</button>
 	          {task.status !== "done" && (
 	            canComplete ? (
 	              <div className="flex flex-col gap-2 sm:flex-row">
+                    {task.type === "procurement_purchase" && (
+                      <button
+                        type="button"
+                        onClick={() => complete(true)}
+                        disabled={loading || procurementSelectedLines === 0}
+                        className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-xs font-black text-blue-700 transition hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-300"
+                      >
+                        Сохранить черновик
+                      </button>
+                    )}
 		                <button
                       onClick={() => complete(false)}
                       disabled={loading || blocksAssemblyTransfer || blocksRepairCompletion || blocksRepairResultCompletion || hasIncompleteRepairComponents || blocksTestingCompletion || (task.type === "assembler_build" && assemblyTransferRemaining <= 0) || (task.type === "packer_pack" && packingSelectedCount <= 0)}
@@ -4610,7 +4721,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
       defaults.deliveries = (data.payload?.shortages || []).map((item) => ({
         component_id: item.component_id,
         line_uid: item.line_uid,
-        qty: item.shortage_qty || item.qty || "",
+        qty: "",
       }));
     }
     if (data.type === "warehouse_receive_components") {
@@ -4802,6 +4913,9 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
 
           {task.type === "procurement_purchase" && (
             <div className="space-y-4">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-semibold text-blue-800">
+                Введите количество из счёта: оно может быть меньше потребности для частичной закупки или больше при минимальной партии поставщика.
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <PayloadField label="Номер счета / ссылка" name="invoice" value={payload.invoice} onChange={change} />
                 <PayloadField label="Поставщик" name="supplier" value={payload.supplier} onChange={change} />
@@ -4854,10 +4968,16 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
                     <input
                       type="number"
                       min="0"
+                      step="any"
                       value={line?.qty || ""}
                       onChange={(e) => changeLine(collection, item.component_id, e.target.value, item.line_uid)}
                       className="w-full min-h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-[#3F8CFF] focus:ring-4 focus:ring-blue-500/10"
                     />
+                    {task.type === "procurement_purchase" && Number(line?.qty || 0) > Number(item.shortage_qty || item.qty || 0) && (
+                      <p className="text-[11px] font-bold text-amber-700">
+                        Излишек {Number(line.qty) - Number(item.shortage_qty || item.qty || 0)} шт. поступит на склад.
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -5252,9 +5372,8 @@ function ManualTaskModal({ user, onClose, onCreated }) {
   );
 }
 
-function TaskCalendar({ endpoint, user }) {
+function TaskCalendar({ endpoint, user, onOpenTask }) {
   const { tasks, loading, reload } = useTasks(endpoint);
-  const [activeTaskId, setActiveTaskId] = useState(null);
   const [manualTaskOpen, setManualTaskOpen] = useState(false);
   const [periodOffset, setPeriodOffset] = useState(0);
   const [viewMode, setViewMode] = useState("week");
@@ -5454,7 +5573,7 @@ function TaskCalendar({ endpoint, user }) {
     <button
       key={task.id}
       type="button"
-      onClick={() => setActiveTaskId(task.id)}
+      onClick={() => onOpenTask(task.id)}
       title={task.title}
       className="task-mini-card block w-full rounded-2xl border border-slate-100 bg-white p-3 text-left text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
     >
@@ -5685,7 +5804,7 @@ function TaskCalendar({ endpoint, user }) {
                 <div className="mac-undated-list">
                   <div><h3>Без срока</h3><span>{noDateTasks.length}</span></div>
                   {noDateTasks.slice(0, 4).map((task) => (
-                    <button type="button" key={task.id} onClick={() => setActiveTaskId(task.id)}>
+                    <button type="button" key={task.id} onClick={() => onOpenTask(task.id)}>
                       <strong>{task.title}</strong>
                       <span>{ROLE_LABELS[task.role] || task.role}</span>
                     </button>
@@ -5717,7 +5836,7 @@ function TaskCalendar({ endpoint, user }) {
                       </button>
                       <div className="mac-month-events">
                         {dayTasks.slice(0, 4).map((task) => (
-                          <button type="button" key={task.id} className={`status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
+                          <button type="button" key={task.id} className={`status-${taskKanbanColumn(task)}`} onClick={() => onOpenTask(task.id)}>
                             <i />
                             <span>{!parseTaskDate(task) ? "Без срока · " : ""}{task.title}</span>
                           </button>
@@ -5778,7 +5897,7 @@ function TaskCalendar({ endpoint, user }) {
                 <div className="mac-undated-list">
                   <div><h3>Без срока</h3><span>{noDateTasks.length}</span></div>
                   {noDateTasks.slice(0, 4).map((task) => (
-                    <button type="button" key={task.id} onClick={() => setActiveTaskId(task.id)}>
+                    <button type="button" key={task.id} onClick={() => onOpenTask(task.id)}>
                       <strong>{task.title}</strong>
                       <span>{ROLE_LABELS[task.role] || task.role}</span>
                     </button>
@@ -5807,7 +5926,7 @@ function TaskCalendar({ endpoint, user }) {
                     return (
                       <div className="mac-simple-day-column" key={formatIsoDate(day)}>
                         {dayTasks.map((task) => (
-                          <button type="button" key={task.id} className={`mac-simple-task status-${taskKanbanColumn(task)}`} onClick={() => setActiveTaskId(task.id)}>
+                          <button type="button" key={task.id} className={`mac-simple-task status-${taskKanbanColumn(task)}`} onClick={() => onOpenTask(task.id)}>
                             <span>{TASK_STATUS_LABELS[task.status] || task.status}</span>
                             <strong>{task.title}</strong>
                             <small>{!parseTaskDate(task) ? "Без срока · " : ""}{task.order_id ? `Заказ #${task.order_id}` : "Без заказа"} · {assigneeName(task)}</small>
@@ -5825,20 +5944,12 @@ function TaskCalendar({ endpoint, user }) {
         </>
       )}
 
-      {activeTaskId && (
-        <TaskDetailModal
-          taskId={activeTaskId}
-          user={user}
-          onClose={() => setActiveTaskId(null)}
-          onChanged={reload}
-        />
-      )}
       {manualTaskOpen && <ManualTaskModal user={user} onClose={() => setManualTaskOpen(false)} onCreated={reload} />}
     </div>
   );
 }
 
-function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = false }) {
+function TaskKanban({ endpoint, user, onOpenPage, onOpenTask, title, subtitle, personal = false }) {
   const { tasks: loadedTasks, loading, reload } = useTasks(endpoint);
   const tasks = personal
     ? loadedTasks.filter((task) => (
@@ -5846,7 +5957,6 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = fa
       || Number(task.assigned_user_id) === Number(user?.id)
     ))
     : loadedTasks;
-  const [activeTaskId, setActiveTaskId] = useState(null);
   const [completingTaskId, setCompletingTaskId] = useState(null);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const [dropColumn, setDropColumn] = useState("");
@@ -6184,7 +6294,7 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = fa
                           key={task.id}
                         task={task}
                         onOpen={onOpenPage}
-                        onOpenTask={setActiveTaskId}
+                        onOpenTask={onOpenTask}
                         compact
                         draggable
                           isDragging={draggingTaskId === task.id}
@@ -6208,14 +6318,6 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = fa
         </div>
       )}
 
-      {activeTaskId && (
-        <TaskDetailModal
-          taskId={activeTaskId}
-          user={user}
-          onClose={() => setActiveTaskId(null)}
-          onChanged={reload}
-        />
-      )}
       {completingTaskId && (
         <QuickCompleteModal
           taskId={completingTaskId}
@@ -6228,9 +6330,8 @@ function TaskKanban({ endpoint, user, onOpenPage, title, subtitle, personal = fa
   );
 }
 
-const Dashboard = ({ user, onOpenPage }) => {
-  const { tasks, reload } = useTasks("/api/tasks/mine");
-  const [activeTaskId, setActiveTaskId] = useState(null);
+const Dashboard = ({ onOpenPage, onOpenTask }) => {
+  const { tasks } = useTasks("/api/tasks/mine");
   const [spotlightIndex, setSpotlightIndex] = useState(0);
   const areaCounts = tasks.reduce((acc, task) => {
     const key = ROLE_LABELS[task.role] || task.role;
@@ -6281,7 +6382,7 @@ const Dashboard = ({ user, onOpenPage }) => {
                 <span>{ROLE_LABELS[spotlightTask.role] || spotlightTask.role}</span>
               </div>
               <div className="dashboard-priority-actions">
-                <button type="button" onClick={() => setActiveTaskId(spotlightTask.id)}>
+                <button type="button" onClick={() => onOpenTask(spotlightTask.id)}>
                   Перейти к задаче <ArrowRight size={17} />
                 </button>
                 {activeTasks.length > 1 && (
@@ -6337,7 +6438,7 @@ const Dashboard = ({ user, onOpenPage }) => {
                 key={task.id}
                 task={task}
                 onOpen={onOpenPage}
-                onOpenTask={setActiveTaskId}
+                onOpenTask={onOpenTask}
                 compact
               />
             ))}
@@ -6364,26 +6465,19 @@ const Dashboard = ({ user, onOpenPage }) => {
           </div>
         </aside>
       </div>
-      {activeTaskId && (
-        <TaskDetailModal
-          taskId={activeTaskId}
-          user={user}
-          onClose={() => setActiveTaskId(null)}
-          onChanged={reload}
-        />
-      )}
     </div>
   );
 };
 
-const AllTasks = ({ user, onOpenPage }) => (
+const AllTasks = ({ user, onOpenPage, onOpenTask }) => (
   <TaskCalendar
     endpoint="/api/tasks"
     user={user}
     onOpenPage={onOpenPage}
+    onOpenTask={onOpenTask}
   />
 );
-const MyTasks = ({ user, onOpenPage }) => (
+const MyTasks = ({ user, onOpenPage, onOpenTask }) => (
   <TaskKanban
     key={user.id}
     endpoint="/api/tasks/mine"
@@ -6392,6 +6486,7 @@ const MyTasks = ({ user, onOpenPage }) => (
     title="Мои задачи"
     subtitle={`${ROLE_LABELS[user.role] || user.role || "Сотрудник"}: персональная очередь работ`}
     onOpenPage={onOpenPage}
+    onOpenTask={onOpenTask}
   />
 );
 
@@ -7283,23 +7378,24 @@ export default function App() {
   };
 
   const openPage = (page) => {
+    setActiveTaskId(null);
     setActivePage(canOpen(page) ? page : "Мои задачи");
   };
 
   const renderContent = () => {
-    if (!canOpen(activePage)) return <Dashboard user={user} onOpenPage={openPage} />;
+    if (!canOpen(activePage)) return <Dashboard key={taskChangeVersion} user={user} onOpenPage={openPage} onOpenTask={setActiveTaskId} />;
 
     switch (activePage) {
-      case "Панель": return <Dashboard user={user} onOpenPage={openPage} />;
+      case "Панель": return <Dashboard key={taskChangeVersion} user={user} onOpenPage={openPage} onOpenTask={setActiveTaskId} />;
       case "Все заявки": return <ManufacturingPage user={user} onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
-      case "Все задачи": return <AllTasks user={user} onOpenPage={openPage} />;
-      case "Мои задачи": return <MyTasks user={user} onOpenPage={openPage} />;
+      case "Все задачи": return <AllTasks key={taskChangeVersion} user={user} onOpenPage={openPage} onOpenTask={setActiveTaskId} />;
+      case "Мои задачи": return <MyTasks key={`${user.id}-${taskChangeVersion}`} user={user} onOpenPage={openPage} onOpenTask={setActiveTaskId} />;
       case "Персонал": return <Personnel currentUser={user} />;
       case "База изделий": return <GadgetsBase />;
       case "Склад ТМЦ": return <InventoryBase user={user} />;
       case "Склад готовой продукции": return <FinishedGoodsBase user={user} />;
       case "Производство": return <ManufacturingPage user={user} onOpenTask={setActiveTaskId} taskChangeVersion={taskChangeVersion} />;
-      default: return <Dashboard user={user} onOpenPage={openPage} />;
+      default: return <Dashboard key={taskChangeVersion} user={user} onOpenPage={openPage} onOpenTask={setActiveTaskId} />;
     }
   };
 
@@ -7325,16 +7421,17 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
         />
-        <main ref={workspaceRef} className="app-main crm-workspace-content w-full max-w-full overflow-x-hidden">{renderContent()}</main>
+        <main ref={workspaceRef} className="app-main crm-workspace-content w-full max-w-full overflow-x-hidden">
+          {activeTaskId ? (
+            <TaskDetailModal
+              taskId={activeTaskId}
+              user={user}
+              onClose={() => setActiveTaskId(null)}
+              onChanged={() => setTaskChangeVersion((version) => version + 1)}
+            />
+          ) : renderContent()}
+        </main>
       </div>
-      {activeTaskId && (
-        <TaskDetailModal
-          taskId={activeTaskId}
-          user={user}
-          onClose={() => setActiveTaskId(null)}
-          onChanged={() => setTaskChangeVersion((version) => version + 1)}
-        />
-      )}
     </div>
   );
 }
