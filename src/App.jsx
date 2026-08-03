@@ -39,6 +39,20 @@ const TASK_ROLE_LABELS = Object.fromEntries(
 
 const ENABLE_ASSEMBLY_PLANNING = false;
 
+function createClientId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 const TASK_PAGE = {
   procurement_purchase: "Все задачи",
   accounting_payment: "Все задачи",
@@ -944,7 +958,7 @@ function AssemblyPlanningModal({ task, users, onClose, onChanged }) {
   const updateAllocations = (updater) => setManualAllocations((current) => updater(current ?? automaticAllocations));
   const change = (id, patch) => updateAllocations((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
   const addRow = (line = productLines[0]) => updateAllocations((current) => [...current, {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     order_item_id: line?.order_item_id || null,
     product_id: line?.product_id || null,
     product_name: line?.product_name || "Изделие",
@@ -1621,7 +1635,7 @@ function TaskDetailModal({ taskId, user, onClose, onChanged }) {
   };
 
   const complete = async (saveOnly = false) => {
-    completionKeyRef.current ||= crypto.randomUUID();
+    completionKeyRef.current ||= createClientId();
     setLoading(true);
     setError("");
     setSuccessMessage("");
@@ -4796,7 +4810,7 @@ function QuickCompleteModal({ taskId, user, onClose, onChanged }) {
   };
 
   const complete = async (saveOnly = false) => {
-    completionKeyRef.current ||= crypto.randomUUID();
+    completionKeyRef.current ||= createClientId();
     setLoading(true);
     setError("");
     const numericPayload = { ...payload };
